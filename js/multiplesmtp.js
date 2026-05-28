@@ -47,4 +47,9 @@ CRM.$(function($) {
   // État initial au chargement
   syncVisibility();
 
+  // Forcer le hidden à 1 quand on clique le bouton de test alternatif
+  $('#multiplesmtp-block input[type="submit"]').on('click', function() {
+    $hiddenVis.val(1);
+  });
+
 });

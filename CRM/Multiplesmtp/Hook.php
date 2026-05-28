@@ -74,6 +74,13 @@ class CRM_Multiplesmtp_Hook {
       }
     }
 
+    // Ajouter le bouton de test alternatif
+    $form->addElement('submit',
+      'multiplesmtp_test',
+      ts('Enregistrer & tester le SMTP transactionnel'),
+      ['class' => 'crm-form-submit']
+    );
+
     // Champ hidden visibilité
     $form->addElement('hidden', 'multiplesmtp_is_visible', 0);
     $form->setDefaults(['multiplesmtp_is_visible' => 0]);
@@ -106,6 +113,7 @@ class CRM_Multiplesmtp_Hook {
     $s      = Civi::settings();
     $prefix = self::SETTING_PREFIX;
 
+    // Sauvegarder les settings
     foreach (self::$fields as $key => $info) {
       $fullKey = $prefix . $key;
 
@@ -121,6 +129,11 @@ class CRM_Multiplesmtp_Hook {
       if ($value !== NULL) {
         $s->set($fullKey, $value);
       }
+    }
+
+    // Détecter si c'est le bouton de test alternatif qui a été cliqué
+    if (!empty($values['multiplesmtp_test'])) {
+      self::sendTestEmail();
     }
   }
 
@@ -142,6 +155,79 @@ class CRM_Multiplesmtp_Hook {
 
     if ($altMailer !== NULL) {
       $params['mailer'] = $altMailer;
+    }
+  }
+
+  private static function sendTestEmail() {
+    // Récupérer l'email de l'administrateur connecté
+    $userEmail = CRM_Core_Session::singleton()->getLoggedInContactEmail();
+
+    if (empty($userEmail)) {
+      CRM_Core_Session::setStatus(
+        ts('Impossible de trouver votre adresse email.'),
+        ts('Erreur'),
+        'error'
+      );
+      return;
+    }
+
+    // Construire le mailer alternatif
+    $mailer = self::buildAlternativeMailer();
+
+    if ($mailer === NULL) {
+      CRM_Core_Session::setStatus(
+        ts('Le SMTP transactionnel n\'est pas configuré.'),
+        ts('Erreur'),
+        'error'
+      );
+      return;
+    }
+
+    // Construire l'email de test
+    $siteName = Civi::settings()->get('site_name') ?: 'CiviCRM';
+    $from     = Civi::settings()->get('fromEmailAddress') ?: 'no-reply@example.com';
+
+    $headers = [
+      'From'         => $from,
+      'To'           => $userEmail,
+      'Subject'      => ts('Test SMTP transactionnel - %1', [1 => $siteName]),
+      'Content-Type' => 'text/html; charset=UTF-8',
+      'Date'         => date('r'),
+      'Message-ID'   => '<' . uniqid('multiplesmtp_') . '@' . php_uname('n') . '>',
+    ];
+
+    $body = "
+      <html>
+      <body>
+        <p>" . ts('Bonjour,') . "</p>
+        <p>" . ts('Ceci est un email de test envoyé via le <strong>SMTP transactionnel</strong> configuré dans votre extension Multiple SMTP.') . "</p>
+        <p>" . ts('Si vous recevez cet email, la configuration est correcte.') . "</p>
+        <hr>
+        <p><small>
+          " . ts('Serveur : %1', [1 => Civi::settings()->get('multiplesmtp_smtp_server')]) . "<br>
+          " . ts('Port : %1',    [1 => Civi::settings()->get('multiplesmtp_smtp_port')]) . "<br>
+          " . ts('Envoyé le : %1', [1 => date('d/m/Y H:i:s')]) . "
+        </small></p>
+      </body>
+      </html>
+    ";
+
+    // Envoyer via le mailer alternatif directement
+    $result = $mailer->send($userEmail, $headers, $body);
+
+    if ($result === TRUE || !is_a($result, 'PEAR_Error')) {
+      CRM_Core_Session::setStatus(
+        ts('Email de test envoyé avec succès à %1 via le SMTP transactionnel.', [1 => $userEmail]),
+        ts('Succès'),
+        'success'
+      );
+    }
+    else {
+      CRM_Core_Session::setStatus(
+        ts('Échec de l\'envoi : %1', [1 => $result->getMessage()]),
+        ts('Erreur SMTP transactionnel'),
+        'error'
+      );
     }
   }
 
