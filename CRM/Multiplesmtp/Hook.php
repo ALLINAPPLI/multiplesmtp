@@ -1,6 +1,6 @@
 <?php
 use CRM_Multiplesmtp_ExtensionUtil as E;
-
+// -- ICI
 class CRM_Multiplesmtp_Hook {
 
   const SETTING_PREFIX = 'multiplesmtp_';
@@ -40,20 +40,23 @@ class CRM_Multiplesmtp_Hook {
     if ($formName !== 'CRM_Admin_Form_Setting_Smtp') {
       return;
     }
-
+    Civi::log()->debug(" --- CRM_Multiplesmtp_Hook --- ");
+    
     $settings = Civi::settings();
-
+    
     foreach (self::$fields as $key => $info) {
       $fullKey      = self::SETTING_PREFIX . $key;
       $currentValue = $settings->get($fullKey);
 
+      Civi::log()->debug(" - key : ".print_r($key,1));
+      Civi::log()->debug(" - fullKey : ".print_r($fullKey,1));
+      Civi::log()->debug(" - currentValue : ".print_r($currentValue,1));
+      Civi::log()->debug(" - info : ".print_r($info,1));
+
+
       if ($info['type'] === 'radio') {
         // Boutons radio Oui / Non
-        $form->addRadio(
-          $fullKey,
-          $info['label'],
-          [1 => ts('Oui'), 0 => ts('Non')]
-        );
+        $form->addYesNo($fullKey,  $info['label'], empty($props[$fullKey]['disabled']), FALSE, $props[$fullKey] ?? []);
         $form->setDefaults([$fullKey => $currentValue ?? 0]);
       }
       elseif ($info['type'] === 'checkbox') {
@@ -74,12 +77,12 @@ class CRM_Multiplesmtp_Hook {
       }
     }
 
-    // Ajouter le bouton de test alternatif
-    $form->addElement('submit',
-      'multiplesmtp_test',
-      ts('Enregistrer & tester le SMTP transactionnel'),
-      ['class' => 'crm-form-submit']
-    );
+    // // Ajouter le bouton de test alternatif
+    // $form->addElement('submit',
+    //   'multiplesmtp_test',
+    //   ts('Enregistrer & tester le SMTP transactionnel'),
+    //   ['class' => 'crm-form-submit']
+    // );
 
     // Champ hidden visibilité
     $form->addElement('hidden', 'multiplesmtp_is_visible', 0);
@@ -89,7 +92,7 @@ class CRM_Multiplesmtp_Hook {
     $form->assign('smtpAltPrefix', self::SETTING_PREFIX);
 
     if($formName == 'CRM_Admin_Form_Setting_Smtp') {
-        Civi::resources()->addScriptFile('multiplesmtp', 'js/smtp_alternatif.js');
+        Civi::resources()->addScriptFile('multiplesmtp', 'js/multiplesmtp.js');
         CRM_Core_Region::instance('page-body')->add(['template' => 'CRM/Multiplesmtp/SmtpAltFields.tpl',]);
     }
   }
@@ -116,6 +119,17 @@ class CRM_Multiplesmtp_Hook {
     // Sauvegarder les settings
     foreach (self::$fields as $key => $info) {
       $fullKey = $prefix . $key;
+      $value = $values[$fullKey] ?? NULL;
+      
+      Civi::log()->debug(" - save fullKey : ".print_r($fullKey,1));
+      Civi::log()->debug(" - save value : ".print_r($value,1));
+
+      if ($key === 'smtp_auth') {       
+        if ($value !== NULL) {
+          $s->set($fullKey, (int) ($value ?? 0));
+        }      
+        continue;
+      }
 
       if ($key === 'smtp_password') {
         // Ne mettre à jour que si un nouveau mot de passe est saisi

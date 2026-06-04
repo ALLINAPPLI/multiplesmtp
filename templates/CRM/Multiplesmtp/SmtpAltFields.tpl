@@ -38,19 +38,21 @@
           </td>
         </tr>
 
-        <tr class="crm-smtp-form-block-smtp-auth">
+        <tr class="crm-smtp-form-block-smtp_auth">
           <td class="label">
             <label>{ts}Authentification requise{/ts}</label>
           </td>
           <td>
-            {$form[$smtpAltPrefix|cat:'smtp_auth'].html}
+            <span style="white-space:nowrap;">
+              {$form[$smtpAltPrefix|cat:'smtp_auth'].html}
+            </span>
             <br>
             <span class="description">
-              {ts}Votre SMTP transactionnel requiert-il une authentification (nom + mot de passe) ?{/ts}
+              {ts}Votre SMTP transactionnel requiert-il une authentification ?{/ts}
             </span>
           </td>
         </tr>
-
+        
         <tr class="crm-smtp-form-block-smtp-username">
           <td class="label">
             <label for="{$smtpAltPrefix}smtp_username">
@@ -83,16 +85,16 @@
 
       </tbody>
     </table>
-  </fieldset>
+  <!-- </fieldset>
 </div>
 <div id="multiplesmtp-block" style="display:none;">
-  <fieldset>
+  <fieldset> -->
     <legend>{ts}Configuration SMTP Transactionnel{/ts}</legend>
 
     {* ... tableau des champs existant ... *}
 
     <div class="crm-submit-buttons" style="margin-top:1em;">
-      {$form.multiplesmtp_test.html}
+      <!-- {$form.multiplesmtp_test.html} -->
     </div>
 
   </fieldset>
