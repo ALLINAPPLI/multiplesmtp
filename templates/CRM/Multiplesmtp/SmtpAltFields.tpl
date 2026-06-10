@@ -85,17 +85,6 @@
 
       </tbody>
     </table>
-  <!-- </fieldset>
-</div>
-<div id="multiplesmtp-block" style="display:none;">
-  <fieldset> -->
-    <legend>{ts}Configuration SMTP Transactionnel{/ts}</legend>
-
-    {* ... tableau des champs existant ... *}
-
-    <div class="crm-submit-buttons" style="margin-top:1em;">
-      <!-- {$form.multiplesmtp_test.html} -->
-    </div>
 
   </fieldset>
 </div>

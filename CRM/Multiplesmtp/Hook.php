@@ -44,7 +44,7 @@ class CRM_Multiplesmtp_Hook {
     if ($formName !== 'CRM_Admin_Form_Setting_Smtp') {
       return;
     }
-    Civi::log()->debug(" --- CRM_Multiplesmtp_Hook --- ");
+    // Civi::log()->debug(" --- CRM_Multiplesmtp_Hook --- ");
     
     $settings = Civi::settings();
     
@@ -52,17 +52,17 @@ class CRM_Multiplesmtp_Hook {
       $fullKey      = self::SETTING_PREFIX . $key;
       $currentValue = $settings->get($fullKey);
 
-      Civi::log()->debug(" - key : ".print_r($key,1));
-      Civi::log()->debug(" - fullKey : ".print_r($fullKey,1));
-      Civi::log()->debug(" - currentValue : ".print_r($currentValue,1));
-      Civi::log()->debug(" - info : ".print_r($info,1));
+      // Civi::log()->debug(" - key : ".print_r($key,1));
+      // Civi::log()->debug(" - fullKey : ".print_r($fullKey,1));
+      // Civi::log()->debug(" - currentValue : ".print_r($currentValue,1));
+      // Civi::log()->debug(" - info : ".print_r($info,1));
 
 
       if ($info['type'] === 'radio') {
         // Boutons radio Oui / Non
         $form->addYesNo($fullKey,  $info['label'], empty($props[$fullKey]['disabled']), FALSE, $props[$fullKey] ?? []);
         if($currentValue == 1 && $fullKey == "multiplesmtp_smtp_auth") {
-          Civi::log()->debug(" - multiplesmtp_smtp_auth : 1");
+          // Civi::log()->debug(" - multiplesmtp_smtp_auth : 1");
           $form->setDefaults([$fullKey => (int) $currentValue]);
         }
         // stocker la valeur pour qu'elle soit accessible en js.
@@ -127,8 +127,8 @@ class CRM_Multiplesmtp_Hook {
       $fullKey = $prefix . $key;
       $value = $values[$fullKey] ?? NULL;
       
-      Civi::log()->debug(" - save fullKey : ".print_r($fullKey,1));
-      Civi::log()->debug(" - save value : ".print_r($value,1));
+      // Civi::log()->debug(" - save fullKey : ".print_r($fullKey,1));
+      // Civi::log()->debug(" - save value : ".print_r($value,1));
 
       if ($key === 'smtp_auth') {       
         if ($value !== NULL) {
@@ -155,6 +155,7 @@ class CRM_Multiplesmtp_Hook {
     }
 
     // Détecter si c'est le bouton de test alternatif qui a été cliqué
+    // Civi::log()->debug(" multiplesmtp_test BUTOON CLIQUE : ".print_r($values['multiplesmtp_test'],1));
     if (!empty($values['multiplesmtp_test'])) {
       self::sendTestEmail();
     }
@@ -170,7 +171,7 @@ class CRM_Multiplesmtp_Hook {
     }
 
     $isBulk = self::isBulkMailing($params, $context);
-    Civi::log()->debug(" alterMailParams isBulk : ".print_r($isBulk,1));
+    // Civi::log()->debug(" alterMailParams isBulk : ".print_r($isBulk,1));
 
     if ($isBulk) {
       // SMTP principal — comportement par défaut, on ne touche à rien
@@ -179,7 +180,7 @@ class CRM_Multiplesmtp_Hook {
 
     // Mail transactionnel → SMTP alternatif
     $altMailer = self::buildAlternativeMailer();
-    Civi::log()->debug(" alterMailParams altMailer : ".print_r($altMailer,1));
+    // Civi::log()->debug(" alterMailParams altMailer : ".print_r($altMailer,1));
 
     if ($altMailer !== NULL) {
       $params['mailer'] = $altMailer;
@@ -204,6 +205,8 @@ class CRM_Multiplesmtp_Hook {
 
     // Construire le mailer alternatif
     $mailer = self::buildAlternativeMailer();
+
+    // Civi::log()->debug(" MAILER : ".print_r($mailer,1));
 
     if ($mailer === NULL) {
       CRM_Core_Session::setStatus(
@@ -244,6 +247,7 @@ class CRM_Multiplesmtp_Hook {
     ";
     self::$internalSend = TRUE;
     // Envoyer via le mailer alternatif directement
+    // Civi::log()->debug(" MAILER avant send : ".print_r($mailer,1));
     $result = $mailer->send($userEmail, $headers, $body);
     self::$internalSend = FALSE;
 
@@ -271,6 +275,13 @@ class CRM_Multiplesmtp_Hook {
      // Contexte explicite (CiviCRM 5.x passe ce paramètre)
     if ($context === 'civimail') {
       Civi::log()->debug(" isBulkMailing : civimail");
+      return TRUE;
+    }
+
+    // Mail de test du SMTP principal (bouton "Tester" natif CiviCRM)
+    // → laisser le core gérer, ne pas router vers le SMTP alternatif
+    if (!empty($params['groupName']) && stripos($params['groupName'], 'SMTP') !== FALSE) {
+      Civi::log()->debug(" isBulkMailing : SMTP test principal");
       return TRUE;
     }
 
@@ -337,7 +348,7 @@ class CRM_Multiplesmtp_Hook {
     }
 
     if (!empty($password)) {
-      $password = self::decryptPassword($password);
+      $password = self::decryptPasswordPublic($password);
     }
 
     $params = [
