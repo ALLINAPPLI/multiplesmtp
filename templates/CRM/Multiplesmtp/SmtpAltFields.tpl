@@ -1,4 +1,4 @@
-<div id="multiplesmtp-block" style="display:none;">
+<div id="multiplesmtp-block" style="display:none;" data-smtp-auth="{$smtpAltDefaults.multiplesmtp_smtp_auth|default:0}">
   <fieldset>
     <legend>{ts}Configuration SMTP Transactionnel{/ts}</legend>
     <p class="description" style="margin-bottom:1em;">

@@ -5,6 +5,10 @@ class CRM_Multiplesmtp_Hook {
 
   const SETTING_PREFIX = 'multiplesmtp_';
 
+  // Flag statique pour éviter que alterMailParams se déclenche
+  // pendant un envoi test initié par postProcess
+  private static bool $internalSend = FALSE;
+  
   private static $fields = [
     'smtp_server' => [
       'label'       => 'Serveur SMTP transactionnel',
@@ -57,7 +61,14 @@ class CRM_Multiplesmtp_Hook {
       if ($info['type'] === 'radio') {
         // Boutons radio Oui / Non
         $form->addYesNo($fullKey,  $info['label'], empty($props[$fullKey]['disabled']), FALSE, $props[$fullKey] ?? []);
-        $form->setDefaults([$fullKey => $currentValue ?? 0]);
+        if($currentValue == 1 && $fullKey == "multiplesmtp_smtp_auth") {
+          Civi::log()->debug(" - multiplesmtp_smtp_auth : 1");
+          $form->setDefaults([$fullKey => (int) $currentValue]);
+        }
+        // stocker la valeur pour qu'elle soit accessible en js.
+        $form->assign('smtpAltDefaults', [
+            'multiplesmtp_smtp_auth' => (int) Civi::settings()->get('multiplesmtp_smtp_auth'),
+        ]);
       }
       elseif ($info['type'] === 'checkbox') {
         $form->addElement('checkbox', $fullKey, $info['label']);
@@ -65,9 +76,10 @@ class CRM_Multiplesmtp_Hook {
       }
       elseif ($info['type'] === 'password') {
         $form->addElement('password', $fullKey, $info['label'],
-          ['class' => 'crm-form-text', 'size' => 45]
+          ['class' => 'crm-form-text', 'size' => 45, 'autocomplete' => 'off']
         );
-        $form->setDefaults([$fullKey => $currentValue]);
+        // ⚠️  NE PAS faire setDefaults ici — le champ reste vide.
+        // Si l'utilisateur ne saisit rien → on garde la valeur DB.
       }
       else {
         $form->addElement('text', $fullKey, $info['label'],
@@ -77,19 +89,13 @@ class CRM_Multiplesmtp_Hook {
       }
     }
 
-    // // Ajouter le bouton de test alternatif
-    // $form->addElement('submit',
-    //   'multiplesmtp_test',
-    //   ts('Enregistrer & tester le SMTP transactionnel'),
-    //   ['class' => 'crm-form-submit']
-    // );
-
     // Champ hidden visibilité
     $form->addElement('hidden', 'multiplesmtp_is_visible', 0);
     $form->setDefaults(['multiplesmtp_is_visible' => 0]);
 
     $form->assign('smtpAltFields', self::$fields);
     $form->assign('smtpAltPrefix', self::SETTING_PREFIX);
+    
 
     if($formName == 'CRM_Admin_Form_Setting_Smtp') {
         Civi::resources()->addScriptFile('multiplesmtp', 'js/multiplesmtp.js');
@@ -132,10 +138,13 @@ class CRM_Multiplesmtp_Hook {
       }
 
       if ($key === 'smtp_password') {
-        // Ne mettre à jour que si un nouveau mot de passe est saisi
-        if (!empty($values[$fullKey])) {
-          $s->set($fullKey, self::encryptPassword($values[$fullKey]));
+        $newPlain = $values[$fullKey] ?? '';
+
+        if (!empty($newPlain)) {
+          // L'utilisateur a saisi un nouveau mot de passe → on chiffre la valeur BRUTE
+          $s->set($fullKey, self::encryptPassword($newPlain));
         }
+        // Si vide → on ne touche pas la valeur déjà en base (déjà chiffrée)
         continue;
       }
 
@@ -155,6 +164,11 @@ class CRM_Multiplesmtp_Hook {
   // 3. Interception et routage du SMTP
   // -------------------------------------------------------
   public static function alterMailParams(&$params, $context = NULL) {
+    // Ne pas interférer pendant nos propres envois internes
+    if (self::$internalSend) {
+      return;
+    }
+
     $isBulk = self::isBulkMailing($params, $context);
     Civi::log()->debug(" alterMailParams isBulk : ".print_r($isBulk,1));
 
@@ -172,6 +186,9 @@ class CRM_Multiplesmtp_Hook {
     }
   }
 
+  // -------------------------------------------------------
+  // Envoi du mail de test (depuis le formulaire)
+  // -------------------------------------------------------
   private static function sendTestEmail() {
     // Récupérer l'email de l'administrateur connecté
     $userEmail = CRM_Core_Session::singleton()->getLoggedInContactEmail();
@@ -225,9 +242,10 @@ class CRM_Multiplesmtp_Hook {
       </body>
       </html>
     ";
-
+    self::$internalSend = TRUE;
     // Envoyer via le mailer alternatif directement
     $result = $mailer->send($userEmail, $headers, $body);
+    self::$internalSend = FALSE;
 
     if ($result === TRUE || !is_a($result, 'PEAR_Error')) {
       CRM_Core_Session::setStatus(
@@ -246,7 +264,7 @@ class CRM_Multiplesmtp_Hook {
   }
 
   // -------------------------------------------------------
-  // Helpers privés
+  // Helpers privés / publics
   // -------------------------------------------------------
 
   private static function isBulkMailing(&$params, $context) {
@@ -334,14 +352,17 @@ class CRM_Multiplesmtp_Hook {
     return Mail::factory('smtp', $params);
   }
 
-  private static function encryptPassword($plain) {
+  private static function encryptPassword(string $plain): string {
     if (class_exists('CRM_Utils_Crypt')) {
       return CRM_Utils_Crypt::encrypt($plain);
     }
     return base64_encode($plain);
   }
 
-  private static function decryptPassword($encrypted) {
+  /**
+   * Public pour permettre à TestSmtp (Api4) de l'appeler.
+   */
+  public static function decryptPasswordPublic(string $encrypted): string {
     if (class_exists('CRM_Utils_Crypt')) {
       return CRM_Utils_Crypt::decrypt($encrypted);
     }

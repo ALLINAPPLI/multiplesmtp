@@ -12,7 +12,15 @@ CRM.$(function($) {
   // 1. Déplacer le bloc juste après #bySMTP
   $altBlock.insertAfter($bySMTP);
 
-  // 2. Injecter le bouton de test alternatif à côté du bouton existant
+  // 2. Pré-sélectionner les radios YesNo depuis les données PHP (via data-attribute)
+  //    CiviCRM/QuickForm ne restitue pas toujours le "checked" sur les groupes injectés via hook.
+  //    On lit la valeur stockée dans le data-attribute posé par le template.
+  var authVal = $altBlock.data('smtp-auth');
+  if (authVal !== undefined && authVal !== '') {
+    $('input[name="' + authName + '"][value="' + parseInt(authVal) + '"]').prop('checked', true);
+  }
+
+  // 3. Injecter le bouton de test alternatif à côté du bouton existant
   var $boutonExistant = $('#_qf_Smtp_refresh_test');
 
   if ($boutonExistant.length) {
