@@ -10,6 +10,10 @@ class CRM_Multiplesmtp_Hook {
   private static bool $internalSend = FALSE;
   
   private static $fields = [
+    // 'enabled' => [
+    //   'label' => 'Configurer un flux transactionnel',
+    //   'type'  => 'checkbox',
+    // ],
     'smtp_server' => [
       'label'       => 'Serveur SMTP transactionnel',
       'type'        => 'text',
@@ -88,6 +92,10 @@ class CRM_Multiplesmtp_Hook {
         $form->setDefaults([$fullKey => $currentValue]);
       }
     }
+    // $form->assign('smtpAltDefaults', [
+    //     'multiplesmtp_smtp_auth'    => (int) Civi::settings()->get('multiplesmtp_smtp_auth'),
+    //     'multiplesmtp_enabled'      => (bool) Civi::settings()->get('multiplesmtp_enabled'),
+    // ]);
 
     // Champ hidden visibilité
     $form->addElement('hidden', 'multiplesmtp_is_visible', 0);
@@ -291,11 +299,11 @@ class CRM_Multiplesmtp_Hook {
       return TRUE;
     }
 
-    // // Vérifier le header X-CiviMail-Bounce s'il est présent
-    // if (!empty($params['headers']['X-CiviMail-Bounce'])) {
-    //   Civi::log()->debug(" isBulkMailing : headers X-CiviMail-Bounce : ".print_r($params['headers']['X-CiviMail-Bounce'],1));
-    //   return TRUE;
-    // }
+    // Vérifier le header X-CiviMail-Bounce s'il est présent
+    if (!empty($params['headers']['X-CiviMail-Bounce'])) {
+      Civi::log()->debug(" isBulkMailing : headers X-CiviMail-Bounce : ".print_r($params['headers']['X-CiviMail-Bounce'],1));
+      return TRUE;
+    }
 
     // 🆕 Mosaico : il pose son propre header sur les previews et envois test
     if (!empty($params['headers']['X-Mosaico-Tracking'])) {
