@@ -10,10 +10,10 @@ class CRM_Multiplesmtp_Hook {
   private static bool $internalSend = FALSE;
   
   private static $fields = [
-    // 'enabled' => [
-    //   'label' => 'Configurer un flux transactionnel',
-    //   'type'  => 'checkbox',
-    // ],
+    'enabled' => [
+      'label' => 'Configurer un flux transactionnel',
+      'type'  => 'checkbox',
+    ],
     'smtp_server' => [
       'label'       => 'Serveur SMTP transactionnel',
       'type'        => 'text',
@@ -50,6 +50,11 @@ class CRM_Multiplesmtp_Hook {
     }
     // Civi::log()->debug(" --- CRM_Multiplesmtp_Hook --- ");
     
+    // Ajouter 'enabled' manuellement — il sera rendu UNIQUEMENT par le TPL
+    $fullKeyEnabled = self::SETTING_PREFIX . 'enabled';
+    $form->addElement('checkbox', $fullKeyEnabled, '');
+    $form->setDefaults([$fullKeyEnabled => (bool) Civi::settings()->get($fullKeyEnabled)]);
+
     $settings = Civi::settings();
     
     foreach (self::$fields as $key => $info) {
@@ -278,8 +283,51 @@ class CRM_Multiplesmtp_Hook {
   // -------------------------------------------------------
   // Helpers privés / publics
   // -------------------------------------------------------
-
   private static function isBulkMailing(&$params, $context) {
+    $groupName = $params['groupName'] ?? '';
+ 
+    Civi::log()->debug(" isBulkMailing - context: " . print_r($context, 1));
+    Civi::log()->debug(" isBulkMailing - groupName: " . print_r($groupName, 1));
+ 
+    // -------------------------------------------------------
+    // CAS BULK (SMTP principal)
+    // Uniquement les envois via le menu Mailing ou Mosaico.
+    // -------------------------------------------------------
+ 
+    // Envoi via CiviMail (menu Mailing → Nouvel envoi)
+    if ($context === 'civimail') {
+      Civi::log()->debug(" isBulkMailing : TRUE → civimail context");
+      return TRUE;
+    }
+ 
+    // Envoi réel via Mosaico
+    if (!empty($params['headers']['X-Mosaico-Tracking'])) {
+      Civi::log()->debug(" isBulkMailing : TRUE → Mosaico tracking header");
+      return TRUE;
+    }
+ 
+    if (!empty($groupName) && stripos($groupName, 'mosaico') !== FALSE) {
+      Civi::log()->debug(" isBulkMailing : TRUE → Mosaico groupName");
+      return TRUE;
+    }
+    // Mail de test du SMTP principal (bouton "Tester" natif CiviCRM)
+    // → laisser le core gérer, ne pas router vers le SMTP alternatif
+    if (!empty($params['groupName']) && stripos($params['groupName'], 'SMTP') !== FALSE) {
+      Civi::log()->debug(" isBulkMailing : SMTP test principal");
+      return TRUE;
+    }
+
+ 
+    // -------------------------------------------------------
+    // TOUT LE RESTE → TRANSACTIONNEL (SMTP alternatif)
+    // Inclus : fiche contact, recherche, groupes, rappels,
+    // confirmations, reçus, mot de passe, tests d'envoi, etc.
+    // -------------------------------------------------------
+    Civi::log()->debug(" isBulkMailing : FALSE → transactionnel par défaut");
+    return FALSE;
+  }
+ 
+  private static function isBulkMailingOld(&$params, $context) {
      // Contexte explicite (CiviCRM 5.x passe ce paramètre)
     if ($context === 'civimail') {
       Civi::log()->debug(" isBulkMailing : civimail");

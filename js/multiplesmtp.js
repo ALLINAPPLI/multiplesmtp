@@ -1,106 +1,40 @@
 CRM.$(function($) {
-// -- ICI
-  if (!$('#bySMTP').length) {
+
+  // Sortir immédiatement si le bloc n'existe pas sur cette page
+  if (!$('#multiplesmtp-block').length) {
     return;
   }
 
   var $altBlock  = $('#multiplesmtp-block');
   var $bySMTP    = $('#bySMTP');
+  var $checkbox  = $('input[name="multiplesmtp_enabled"]');
   var $hiddenVis = $('input[name="multiplesmtp_is_visible"]');
   var authName   = 'multiplesmtp_smtp_auth';
 
-  // 1. Déplacer le bloc juste après #bySMTP
-  $altBlock.insertAfter($bySMTP);
+  // ── 1. Déplacer les blocs AVANT les boutons submit ─────────────────────
+  var $enableBlock = $('#multiplesmtp-enable-block');
+  var $submitBtns  = $('form[name="Smtp"] .crm-submit-buttons').first();
 
-  // 2. Pré-sélectionner les radios YesNo depuis les données PHP (via data-attribute)
-  //    CiviCRM/QuickForm ne restitue pas toujours le "checked" sur les groupes injectés via hook.
-  //    On lit la valeur stockée dans le data-attribute posé par le template.
+  if ($submitBtns.length) {
+    $enableBlock.insertBefore($submitBtns);
+    $altBlock.insertBefore($submitBtns);
+  } else {
+    // Fallback : après #bySMTP si présent
+    $enableBlock.insertAfter($bySMTP);
+    $altBlock.insertAfter($enableBlock);
+  }
+
+  // ── 2. Pré-sélectionner les radios YesNo depuis le data-attribute ──────
   var authVal = $altBlock.data('smtp-auth');
   if (authVal !== undefined && authVal !== '') {
-    $('input[name="' + authName + '"][value="' + parseInt(authVal) + '"]').prop('checked', true);
+    $('input[name="' + authName + '"][value="' + parseInt(authVal) + '"]')
+      .prop('checked', true);
   }
 
-  // 3. Injecter le bouton de test alternatif à côté du bouton existant
-  var $boutonExistant = $('#_qf_Smtp_refresh_test');
-
-  if ($boutonExistant.length) {
-    var $nouveauBouton = $(
-      '<a href="#" id="multiplesmtp_test_btn" class="crm-form-xbutton button" style="margin-left:8px; cursor:pointer;">' +
-      '<i role="img" aria-hidden="true" class="crm-i fa-envelope-o"></i> ' +
-      'Enregistrer &amp; tester SMTP transactionnel' +
-      '</a>'
-    );
-
-    $nouveauBouton.insertAfter($boutonExistant);
-
-    $nouveauBouton.on('click', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-
-      console.log('clic détecté sur bouton test alternatif');
-
-      var $btn = $(this);
-      $btn.prop('disabled', true)
-          .find('i')
-          .removeClass('fa-envelope-o')
-          .addClass('fa-spinner fa-spin');
-
-      var formData = {
-        server   : $('input[name="multiplesmtp_smtp_server"]').val(),
-        port     : parseInt($('input[name="multiplesmtp_smtp_port"]').val()),
-        auth     : $('input[name="multiplesmtp_smtp_auth"]:checked').val() === '1',
-        username : $('input[name="multiplesmtp_smtp_username"]').val(),
-        password : '', //  Ne pas envoyer le password — l'API utilisera celui sauvegardé en base
-      };
-
-      console.log('formData :', formData);
-
-      CRM.api4('Multiplesmtp', 'testSmtp', formData)
-        .then(function(results) {
-          console.log('API4 success :', results);
-          var result = results[0];
-          CRM.alert(result.message, ts('Succès'), 'success');
-        })
-        .catch(function(error) {
-          console.log('API4 error complet :', JSON.stringify(error));
-          var message = (error && error.error_message)
-            ? error.error_message
-            : ts('Erreur inconnue - voir console');
-          CRM.alert(message, ts('Erreur SMTP transactionnel'), 'error');
-        })
-        .finally(function() {
-          $btn.prop('disabled', false)
-              .find('i')
-              .removeClass('fa-spinner fa-spin')
-              .addClass('fa-envelope-o');
-        });
-
-      return false; // Double sécurité
-    });
-
-  }
-
-  console.log('bouton existant trouvé :', $boutonExistant.length);
-  console.log('nouveau bouton inséré :', $('#multiplesmtp_test_btn').length);
-
-  // 3. Sync visibilité
-  function syncVisibility() {
-    var visible = $bySMTP.is(':visible');
-    $hiddenVis.val(visible ? 1 : 0);
-
-    if (visible) {
-      $altBlock.slideDown(200);
-      toggleAuthFields();
-    } else {
-      $altBlock.hide();
-    }
-  }
-
-  // 4. Masquer/afficher username + password selon auth
+  // ── 3. Afficher/masquer username + password selon le radio auth ─────────
   function toggleAuthFields() {
     var authRequired = $('input[name="' + authName + '"]:checked').val() == '1';
-    var $authRows    = $altBlock.find(
+    var $authRows = $altBlock.find(
       '.crm-smtp-form-block-smtp-username, .crm-smtp-form-block-smtp-password'
     );
     if (authRequired) {
@@ -110,29 +44,108 @@ CRM.$(function($) {
     }
   }
 
-  // 5. MutationObserver sur #bySMTP
-  if (window.MutationObserver) {
+  // ── 4. Visibilité de l'encart SMTP alternatif (pilotée par la checkbox) ─
+  function syncEnabledBlock() {
+    var enabled = $checkbox.is(':checked');
+    if (enabled) {
+      $altBlock.slideDown(200, function() {
+        syncSmtpVisibility();
+      });
+    } else {
+      $altBlock.slideUp(200);
+    }
+  }
+
+  // ── 5. Sync visibilité interne (SMTP principal visible ou non) ──────────
+  function syncSmtpVisibility() {
+    if (!$checkbox.is(':checked')) {
+      return;
+    }
+    var smtpVisible = $bySMTP.length ? $bySMTP.is(':visible') : true;
+    $hiddenVis.val(smtpVisible ? 1 : 0);
+    toggleAuthFields();
+  }
+
+  // ── 6. Bouton de test — dans l'encart ──────────────────────────────────
+  $('#multiplesmtp_test_btn').on('click', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    var $btn = $(this);
+    $btn.prop('disabled', true)
+        .find('i')
+        .removeClass('fa-envelope-o')
+        .addClass('fa-spinner fa-spin');
+
+    var formData = {
+      server   : $('input[name="multiplesmtp_smtp_server"]').val(),
+      port     : parseInt($('input[name="multiplesmtp_smtp_port"]').val(), 10),
+      auth     : $('input[name="multiplesmtp_smtp_auth"]:checked').val() === '1',
+      username : $('input[name="multiplesmtp_smtp_username"]').val(),
+      password : '',
+    };
+
+    CRM.api4('Multiplesmtp', 'testSmtp', formData)
+      .then(function(results) {
+        var result = results[0];
+        CRM.alert(result.message, ts('Succès'), 'success');
+      })
+      .catch(function(error) {
+        var message = (error && error.error_message)
+          ? error.error_message
+          : ts('Erreur inconnue — voir la console');
+        CRM.alert(message, ts('Erreur SMTP transactionnel'), 'error');
+      })
+      .finally(function() {
+        $btn.prop('disabled', false)
+            .find('i')
+            .removeClass('fa-spinner fa-spin')
+            .addClass('fa-envelope-o');
+      });
+
+    return false;
+  });
+
+  // ── 7. MutationObserver sur #bySMTP (changement de style) ──────────────
+  if (window.MutationObserver && $bySMTP.length) {
     var observer = new MutationObserver(function(mutations) {
       mutations.forEach(function(m) {
         if (m.attributeName === 'style') {
-          syncVisibility();
+          syncSmtpVisibility();
         }
       });
     });
-    observer.observe($bySMTP[0], {
-      attributes: true,
-      attributeFilter: ['style']
-    });
+    observer.observe($bySMTP[0], { attributes: true, attributeFilter: ['style'] });
   }
 
-  // 6. Écouter les radios
+  // ── 8. Écouteurs d'événements ───────────────────────────────────────────
+  $checkbox.on('change', syncEnabledBlock);
+
   $('input[name="outBound_option"]').on('change', function() {
-    setTimeout(syncVisibility, 50);
+    setTimeout(syncSmtpVisibility, 50);
   });
 
   $('input[name="' + authName + '"]').on('change', toggleAuthFields);
 
-  // 7. État initial
-  syncVisibility();
+  // ── 9. État initial ─────────────────────────────────────────────────────
+  syncEnabledBlock();
 
+  // Masquer les blocs hors <form>
+  document.querySelectorAll('#multiplesmtp-enable-block').forEach(el => {
+    if (!el.closest('form')) el.style.display = 'none';
+  });
+
+  // Style commun
+  const style = {
+    backgroundColor: '#e8f0f7',
+    border: '1px solid #c8d8e8',
+    borderRadius: '4px',
+    padding: '0.6em 1em',
+  };
+
+  ['#multiplesmtp-enable-block', '#multiplesmtp-block'].forEach(selector => {
+    const el = document.querySelector(selector);
+    if (el) Object.assign(el.style, style);
+  });
 });

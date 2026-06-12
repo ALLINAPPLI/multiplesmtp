@@ -1,10 +1,22 @@
-<div id="multiplesmtp-block" style="display:none;" data-smtp-auth="{$smtpAltDefaults.multiplesmtp_smtp_auth|default:0}">
+{* ── Case à cocher maître — toujours visible ──────────────────────────── *}
+<div id="multiplesmtp-enable-block" style="margin: 1.2em 0 0.5em;">
+  <label style="font-weight:600; cursor:pointer;">
+    {$form.multiplesmtp_enabled.html}
+    &nbsp;{ts}Souhaitez-vous configurer un flux transactionnel ?{/ts}
+  </label>
+</div>
+
+{* ── Bloc de configuration — affiché seulement si case cochée ────────── *}
+<div id="multiplesmtp-block"
+     style="display:none;"
+     data-smtp-auth="{$smtpAltDefaults.multiplesmtp_smtp_auth|default:0}">
   <fieldset>
     <legend>{ts}Configuration SMTP Transactionnel{/ts}</legend>
+
     <p class="description" style="margin-bottom:1em;">
-      {ts}Ce SMTP sera utilisé pour les mails individuels (confirmations, alertes, reçus).
-      Les mailings en masse utilisent le SMTP principal ci-dessus.{/ts}
+      {ts}Ce SMTP sera utilisé pour les mails individuels (confirmations, alertes, reçus). Les mailings en masse utilisent le SMTP principal ci-dessus.{/ts}
     </p>
+
     <table class="form-layout-compressed">
       <tbody>
 
@@ -52,7 +64,7 @@
             </span>
           </td>
         </tr>
-        
+
         <tr class="crm-smtp-form-block-smtp-username">
           <td class="label">
             <label for="{$smtpAltPrefix}smtp_username">
@@ -83,8 +95,21 @@
           </td>
         </tr>
 
+        {* ── Bouton test — dans l'encart, pas à côté du bouton principal ── *}
+        <tr class="crm-smtp-form-block-test-btn">
+          <td class="label"></td>
+          <td style="padding-top:0.75em;">
+            <a href="#"
+               id="multiplesmtp_test_btn"
+               class="crm-form-xbutton button"
+               style="cursor:pointer;">
+              <i role="img" aria-hidden="true" class="crm-i fa-envelope-o"></i>
+              &nbsp;{ts}Enregistrer &amp; tester SMTP transactionnel{/ts}
+            </a>
+          </td>
+        </tr>
+
       </tbody>
     </table>
-
   </fieldset>
 </div>
