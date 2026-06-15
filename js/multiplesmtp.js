@@ -7,7 +7,7 @@ CRM.$(function($) {
 
   var $altBlock  = $('#multiplesmtp-block');
   var $bySMTP    = $('#bySMTP');
-  var $checkbox  = $('input[name="multiplesmtp_enabled"]');
+  var $checkboxAll = $('input[name="multiplesmtp_enabled"]');
   var $hiddenVis = $('input[name="multiplesmtp_is_visible"]');
   var authName   = 'multiplesmtp_smtp_auth';
 
@@ -19,7 +19,6 @@ CRM.$(function($) {
     $enableBlock.insertBefore($submitBtns);
     $altBlock.insertBefore($submitBtns);
   } else {
-    // Fallback : après #bySMTP si présent
     $enableBlock.insertAfter($bySMTP);
     $altBlock.insertAfter($enableBlock);
   }
@@ -45,20 +44,29 @@ CRM.$(function($) {
   }
 
   // ── 4. Visibilité de l'encart SMTP alternatif (pilotée par la checkbox) ─
-  function syncEnabledBlock() {
-    var enabled = $checkbox.is(':checked');
-    if (enabled) {
-      $altBlock.slideDown(200, function() {
+  function syncEnabledBlock(animate) {
+    var enabled = $checkboxAll.filter(':checked').length > 0;
+    // Synchroniser toutes les checkboxes au même état
+    $checkboxAll.prop('checked', enabled);
+    if (animate === false) {
+      if (enabled) {
+        $altBlock.show();
         syncSmtpVisibility();
-      });
+      } else {
+        $altBlock.hide();
+      }
     } else {
-      $altBlock.slideUp(200);
+      if (enabled) {
+        $altBlock.slideDown(200, function() { syncSmtpVisibility(); });
+      } else {
+        $altBlock.slideUp(200);
+      }
     }
   }
 
   // ── 5. Sync visibilité interne (SMTP principal visible ou non) ──────────
   function syncSmtpVisibility() {
-    if (!$checkbox.is(':checked')) {
+    if (!$checkboxAll.filter(':checked').length) {
       return;
     }
     var smtpVisible = $bySMTP.length ? $bySMTP.is(':visible') : true;
@@ -78,31 +86,39 @@ CRM.$(function($) {
         .removeClass('fa-envelope-o')
         .addClass('fa-spinner fa-spin');
 
-    var formData = {
-      server   : $('input[name="multiplesmtp_smtp_server"]').val(),
-      port     : parseInt($('input[name="multiplesmtp_smtp_port"]').val(), 10),
-      auth     : $('input[name="multiplesmtp_smtp_auth"]:checked').val() === '1',
-      username : $('input[name="multiplesmtp_smtp_username"]').val(),
-      password : '',
-    };
+    // 1. Soumettre le formulaire via AJAX
+    var $form = $('form[name="Smtp"]');
+    var formData = $form.serialize();
 
-    CRM.api4('Multiplesmtp', 'testSmtp', formData)
-      .then(function(results) {
-        var result = results[0];
-        CRM.alert(result.message, ts('Succès'), 'success');
-      })
-      .catch(function(error) {
-        var message = (error && error.error_message)
-          ? error.error_message
-          : ts('Erreur inconnue — voir la console');
-        CRM.alert(message, ts('Erreur SMTP transactionnel'), 'error');
-      })
-      .finally(function() {
+    $.ajax({
+      type: 'POST',
+      url: $form.attr('action'),
+      data: formData,
+      success: function() {
+        // 2. Une fois enregistré, lancer le test
+        CRM.api4('Multiplesmtp', 'testSmtp', {}).then(function(results) {
+          var result = results[0];
+          CRM.alert(result.message, ts('Succès'), 'success');
+        }).catch(function(error) {
+          var message = (error && error.error_message)
+            ? error.error_message
+            : ts('Erreur inconnue — voir la console');
+          CRM.alert(message, ts('Erreur SMTP transactionnel'), 'error');
+        }).finally(function() {
+          $btn.prop('disabled', false)
+              .find('i')
+              .removeClass('fa-spinner fa-spin')
+              .addClass('fa-envelope-o');
+        });
+      },
+      error: function() {
+        CRM.alert(ts('Échec de la sauvegarde'), ts('Erreur'), 'error');
         $btn.prop('disabled', false)
             .find('i')
             .removeClass('fa-spinner fa-spin')
             .addClass('fa-envelope-o');
-      });
+      }
+    });
 
     return false;
   });
@@ -120,7 +136,11 @@ CRM.$(function($) {
   }
 
   // ── 8. Écouteurs d'événements ───────────────────────────────────────────
-  $checkbox.on('change', syncEnabledBlock);
+  $checkboxAll.on('change', function() {
+    var checked = $(this).is(':checked');
+    $checkboxAll.prop('checked', checked);
+    syncEnabledBlock();
+  });
 
   $('input[name="outBound_option"]').on('change', function() {
     setTimeout(syncSmtpVisibility, 50);
@@ -129,7 +149,7 @@ CRM.$(function($) {
   $('input[name="' + authName + '"]').on('change', toggleAuthFields);
 
   // ── 9. État initial ─────────────────────────────────────────────────────
-  syncEnabledBlock();
+  syncEnabledBlock(false);
 
   // Masquer les blocs hors <form>
   document.querySelectorAll('#multiplesmtp-enable-block').forEach(el => {

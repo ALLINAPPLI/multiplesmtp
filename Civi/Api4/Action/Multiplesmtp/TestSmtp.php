@@ -86,7 +86,7 @@ class TestSmtp extends AbstractAction {
     }
   
     $headers = [
-      'From'         => $from,
+      'From'         => $bounceEmail,
       'To'           => $userEmail,
       'Subject'      => \ts('Test SMTP transactionnel - CiviCRM'),
       'Content-Type' => 'text/html; charset=UTF-8',
