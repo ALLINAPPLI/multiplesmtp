@@ -2,11 +2,18 @@
 <extension key="multiplesmtp" type="module">
   <file>multiplesmtp</file>
   <name>Gestad multiplesmtp</name>
-  <description>Civicrm extension qui permet de la creation d'un 2 ème SMTP. 
-    Ceci dans le but de différencier les envoi le courriels transactionnel et de campagne (bluck).
+  <description>Civicrm extension qui permet de la creation d'un 2 &#xE8;me SMTP. 
+    Ceci dans le but de diff&#xE9;rencier les envoi le courriels transactionnel et de campagne (bluck).
     ----------------------------------
     CiviCRM extension that allows the creation of a 2nd SMTP server.
     This in order to differentiate the sending of transactional emails and campaign emails (bluck).
+    ___________________________________________________
+    
+    Si SMTP Propriétaire les fonctionnements natif de civicrm n'est plus utilisé donc cette extension n'a pas d'utilité.
+    Marche si l'envoie de mail se fait pas part le port smtp.
+    -----------------------------------
+    If you're using a proprietary SMTP server, civicrm's native functionality is no longer used, so this extension is unnecessary.
+    It works if emails are not sent via the SMTP port.
   </description>
   <license>AGPL-3.0</license>
   <authors>

@@ -2,6 +2,7 @@
 
 namespace Civi\Api4\Action\Multiplesmtp;
 
+
 use Civi\Api4\Generic\AbstractAction;
 use Civi\Api4\Generic\Result;
 
@@ -68,16 +69,30 @@ class TestSmtp extends AbstractAction {
       );
     }
 
-    $from = \Civi::settings()->get('fromEmailAddress')
-      ?: ('no-reply@' . php_uname('n'));
+    $bounceEmail = '';
+    $mailsettings = \Civi\Api4\MailSettings::get()
+      ->addWhere('is_default', '=', 1)
+      ->execute();
+    foreach ($mailsettings as $mailsetting) {
+      $bounceEmail = $mailsetting['return_path'];
+    }
 
+    $from = '';
+    $siteEmailAddresses = \Civi\Api4\SiteEmailAddress::get(TRUE)
+      ->addWhere('is_default', '=', TRUE)
+      ->execute();
+    foreach ($siteEmailAddresses as $siteEmailAddresse) {
+      $from = $siteEmailAddresse['email'];
+    }
+  
     $headers = [
-      'From'         => $from,
+      'From'         => $bounceEmail,
       'To'           => $userEmail,
       'Subject'      => \ts('Test SMTP transactionnel - CiviCRM'),
       'Content-Type' => 'text/html; charset=UTF-8',
       'Date'         => date('r'),
       'Message-ID'   => '<' . uniqid('multiplesmtp_') . '@' . php_uname('n') . '>',
+      'returnPath' => $bounceEmail,
     ];
 
     $body = '
