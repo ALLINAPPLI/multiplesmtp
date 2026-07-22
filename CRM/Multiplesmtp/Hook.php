@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 <?php
 use CRM_Multiplesmtp_ExtensionUtil as E;
 
