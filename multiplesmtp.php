@@ -12,33 +12,15 @@ use CRM_Multiplesmtp_ExtensionUtil as E;
 function multiplesmtp_civicrm_config(&$config): void {
   _multiplesmtp_civix_civicrm_config($config);
 
-  // // Créer un listener SendBatchEvent 
-  // Civi::dispatcher()->addListener(
-  //   \Civi\FlexMailer\FlexMailer::EVENT_SEND,
-  //   function(\Civi\FlexMailer\Event\SendBatchEvent $e) {
-  //     $job = $e->getJob();
-  //     // Uniquement les envois test (is_test = 1)
-  //     if (empty($job->is_test)) {
-  //       return;
-  //     }
-  //     // Remplacer le service pear_mail par le mailer alternatif
-  //     $altMailer = CRM_Multiplesmtp_Hook::buildAlternativeMailerPublic();
-  //     if ($altMailer) {
-  //       \Civi::$statics['pear_mail_override'] = $altMailer;
-  //     }
-  //   },
-  //   200 // priorité plus haute que DefaultSender
-  // );
-
-  // // restaurer le service original après l'envoi
-  // \Civi::dispatcher()->addListener(
-  //   'civi.flexmailer.send',
-  //   function($e) {
-  //     // Restaurer le mailer original après l'envoi
-  //     \Civi::container()->set('pear_mail', \CRM_Utils_Mail::createMailer());
-  //   },
-  //   -999 // priorité très basse = après DefaultSender
-  // );
+  // Se déclenche une fois par job de mailing traité (envoi normal OU envoi
+  // de test), avant l'envoi des messages du job. Permet de déterminer, en
+  // fonction du nombre de destinataires du job, si ce job doit utiliser le
+  // SMTP transactionnel ou le SMTP principal (bulk). Cf. Hook::onFlexMailerRun().
+  Civi::dispatcher()->addListener(
+    \Civi\FlexMailer\FlexMailer::EVENT_RUN,
+    ['CRM_Multiplesmtp_Hook', 'onFlexMailerRun'],
+    200 // priorité haute : on veut calculer la décision avant tout le reste
+  );
 }
 
 /**

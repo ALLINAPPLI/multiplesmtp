@@ -193,27 +193,160 @@ class CRM_Multiplesmtp_Hook {
   public static bool $useAltMailerForNextSend = FALSE;
 
   /**
+   * Décision de routage (SMTP transactionnel ou non) calculée une fois
+   * par job de mailing (test ou normal) via onFlexMailerRun(), et
+   * consommée ensuite pour chaque destinataire de ce job.
+   */
+  private static bool $currentJobUseAltMailer = FALSE;
+
+  /**
    * hook_civicrm_alterMailer : n'intervient qu'une fois par requête,
    * au moment où CiviCRM construit son mailer par défaut.
+   *
+   * On exclut explicitement le bouton natif « Save & Send Test Email »
+   * de la page Administer > System Settings > Outbound Mail : ce flux
+   * appelle _createMailer() (qui déclenche ce hook) puis envoie via
+   * CRM_Utils_Mail::sendTest(), qui appelle $mailer->send() directement
+   * SANS repasser par alterMailParams(). Si on enveloppait ce mailer dans
+   * notre ProxyMailer, celui-ci consulterait un flag $useAltMailerForNextSend
+   * périmé (laissé par un envoi précédent sans rapport), et pourrait donc
+   * envoyer le test du SMTP principal via le SMTP alternatif (ou l'inverse).
+   * Ce test doit rester strictement indépendant de notre logique de routage.
    */
   public static function alterMailer(&$mailer, $driver, $params) {
+    if (self::isNativeSmtpTestCall()) {
+      return;
+    }
+
     if (!($mailer instanceof CRM_Multiplesmtp_ProxyMailer)) {
       $mailer = new CRM_Multiplesmtp_ProxyMailer($mailer);
     }
   }
 
-  public static function alterMailParams(&$params, $context = NULL) {
-    if (self::$internalSend) {
-      self::$useAltMailerForNextSend = FALSE;
-      return;
+  /**
+   * Détecte si on est appelé depuis CRM_Admin_Form_Setting_Smtp::sendTest()
+   * (bouton natif « Save & Send Test Email »), via la pile d'appels.
+   */
+  private static function isNativeSmtpTestCall(): bool {
+    foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 20) as $frame) {
+      if (($frame['class'] ?? NULL) === 'CRM_Admin_Form_Setting_Smtp'
+        && ($frame['function'] ?? NULL) === 'sendTest') {
+        return TRUE;
+      }
     }
+    return FALSE;
+  }
 
-    $isRealMailing = in_array($context, ['civimail', 'flexmailer', 'testEmail'], TRUE)
-      || !empty($params['headers']['List-Unsubscribe']);
+  /**
+   * Écouteur de l'événement FlexMailer "civi.flexmailer.run".
+   * Se déclenche une fois par job traité (envoi normal OU envoi de test),
+   * avant l'envoi effectif des messages du job.
+   *
+   * On y détermine, pour CE job, si le nombre de destinataires est
+   * <= au seuil natif CiviCRM `simple_mail_limit` (Administer > System
+   * Settings > Outbound Mail) : si oui, tous les envois de ce job
+   * utiliseront le SMTP transactionnel ; sinon, le SMTP principal (bulk).
+   */
+  public static function onFlexMailerRun(\Civi\FlexMailer\Event\RunEvent $event): void {
+    // Par défaut (sécurité) : on reste sur le SMTP principal.
+    self::$currentJobUseAltMailer = FALSE;
 
-    // On ne fait QUE positionner le flag ; le proxy mailer s'occupe du routage réel.
-    self::$useAltMailerForNextSend = !$isRealMailing
-      && self::buildAlternativeMailer() !== NULL;
+    try {
+      $job = $event->getJob();
+      if (!$job || empty($job->id)) {
+        return;
+      }
+
+      // Le SMTP transactionnel doit être configuré et activé.
+      if (self::buildAlternativeMailer() === NULL) {
+        return;
+      }
+
+      // Réglage natif CiviCRM (Administer > System Settings > Outbound Mail),
+      // pas un setting de cette extension.
+      $limit = (int) (Civi::settings()->get('simple_mail_limit') ?? 0);
+      if ($limit <= 0) {
+        // Pas de seuil configuré : comportement inchangé, tout va sur le SMTP principal.
+        return;
+      }
+
+      // Nombre de destinataires réels de CE job (test ou normal).
+      $recipientCount = (int) CRM_Core_DAO::singleValueQuery(
+        'SELECT COUNT(*) FROM civicrm_mailing_event_queue WHERE job_id = %1',
+        [1 => [$job->id, 'Integer']]
+      );
+
+      self::$currentJobUseAltMailer = ($recipientCount > 0 && $recipientCount <= $limit);
+    }
+    catch (\Throwable $e) {
+      // On ne doit JAMAIS faire échouer l'envoi (ou le test) d'un mailing
+      // à cause de cette logique de routage. En cas de souci, on journalise
+      // et on se rabat silencieusement sur le SMTP principal.
+      Civi::log()->error('multiplesmtp: onFlexMailerRun a échoué : ' . $e->getMessage());
+      self::$currentJobUseAltMailer = FALSE;
+    }
+  }
+
+  public static function alterMailParams(&$params, $context = NULL) {
+    try {
+      if (self::$internalSend) {
+        self::$useAltMailerForNextSend = FALSE;
+        return;
+      }
+
+      // Le SMTP transactionnel doit être configuré et activé.
+      if (self::buildAlternativeMailer() === NULL) {
+        self::$useAltMailerForNextSend = FALSE;
+        return;
+      }
+
+      // Réglage natif CiviCRM (Administer > System Settings > Outbound Mail).
+      $limit = (int) (Civi::settings()->get('simple_mail_limit') ?? 0);
+      if ($limit <= 0) {
+        // Pas de seuil configuré : tout part sur le SMTP principal.
+        self::$useAltMailerForNextSend = FALSE;
+        return;
+      }
+
+      $isMailingContext = in_array($context, ['civimail', 'flexmailer', 'testEmail'], TRUE)
+        || !empty($params['headers']['List-Unsubscribe']);
+
+      if ($isMailingContext) {
+        // Envoi via un mailing CiviMail (test ou normal) : la décision a été
+        // prise en amont dans onFlexMailerRun(), en fonction du nombre total
+        // de destinataires du job par rapport au seuil `simple_mail_limit`.
+        self::$useAltMailerForNextSend = self::$currentJobUseAltMailer;
+      }
+      else {
+        // Tout le reste (email transactionnel unitaire, tâche "Envoyer un
+        // email" sur une petite sélection, etc.) : on compte les destinataires
+        // de CE message précis et on applique la même règle de seuil.
+        $recipientCount = self::countRecipients($params);
+        self::$useAltMailerForNextSend = ($recipientCount > 0 && $recipientCount <= $limit);
+      }
+    }
+    catch (\Throwable $e) {
+      // Ne jamais faire échouer un envoi/test à cause de cette logique de
+      // routage : on journalise et on se rabat sur le SMTP principal.
+      Civi::log()->error('multiplesmtp: alterMailParams a échoué : ' . $e->getMessage());
+      self::$useAltMailerForNextSend = FALSE;
+    }
+  }
+
+  /**
+   * Compte le nombre de destinataires (to + cc + bcc) d'un envoi unitaire,
+   * à partir des paramètres passés à hook_civicrm_alterMailParams.
+   */
+  private static function countRecipients(array $params): int {
+    $blob = '';
+    foreach (['toEmail', 'to', 'cc', 'bcc'] as $key) {
+      if (!empty($params[$key])) {
+        $blob .= ' ' . $params[$key];
+      }
+    }
+    preg_match_all('/[^\s,;<>"]+@[^\s,;<>"]+/', $blob, $matches);
+    $count = count(array_unique(array_map('strtolower', $matches[0])));
+    return max($count, 1);
   }
 
 
