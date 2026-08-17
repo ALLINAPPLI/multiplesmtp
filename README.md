@@ -252,30 +252,30 @@ The fields are dynamically injected into `CRM_Admin_Form_Setting_Smtp` via:
 
 ---------------------------------------------------------------------------------------------
 
-# Multiple SMTP — Developer Guide
+# Multiple SMTP — Guide développeur
 
-## Technical goal
+## Objectif technique
 
-CiviCRM only builds its PEAR mailer (`pear_mail`) **once per request**, via `CRM_Utils_Mail::createMailer()`. There's no native mechanism to dynamically route to a different mailer per message depending on context. This extension fills that gap by hooking into two CiviCRM hooks and one FlexMailer event.
+CiviCRM ne construit son mailer PEAR (`pear_mail`) qu'**une seule fois par requête**, via `CRM_Utils_Mail::createMailer()`. Il n'existe pas de mécanisme natif pour router dynamiquement, message par message, vers un mailer différent selon le contexte. Cette extension comble ce manque en interceptant deux hooks CiviCRM et un événement FlexMailer.
 
 ## Architecture
 
 ```
-multiplesmtp.php                    ← hook declarations + FlexMailer listener
-CRM/Multiplesmtp/Hook.php           ← all business logic (form, routing, settings)
-CRM/Multiplesmtp/ProxyMailer.php    ← "façade" mailer that actually routes the send
-templates/CRM/Multiplesmtp/SmtpAltFields.tpl  ← fields injected into the native SMTP form
-js/multiplesmtp.js                  ← conditional field display (show/hide based on the enabled checkbox)
+multiplesmtp.php                    ← déclarations des hooks + listener FlexMailer
+CRM/Multiplesmtp/Hook.php           ← toute la logique métier (formulaire, routage, settings)
+CRM/Multiplesmtp/ProxyMailer.php    ← mailer "façade" qui route réellement l'envoi
+templates/CRM/Multiplesmtp/SmtpAltFields.tpl  ← champs injectés dans le formulaire SMTP natif
+js/multiplesmtp.js                  ← affichage conditionnel des champs (show/hide selon la case activée)
 ```
 
 ### 1. `hook_civicrm_alterMailer` → `Hook::alterMailer()`
 
-Fired when CiviCRM builds its default mailer (`_createMailer()`). We **wrap** the native mailer object in `CRM_Multiplesmtp_ProxyMailer`, except in one specific case (see below). All the logic for choosing the destination (primary vs. transactional) is then delegated to this proxy at the moment of the actual send.
+Déclenché quand CiviCRM construit son mailer par défaut (`_createMailer()`). On y **enveloppe** l'objet mailer natif dans `CRM_Multiplesmtp_ProxyMailer`, sauf dans un cas précis (voir plus bas). Toute la logique de choix de destination (principal vs. transactionnel) est ensuite déléguée à ce proxy au moment de l'envoi effectif.
 
 ```php
 public static function alterMailer(&$mailer, $driver, $params) {
   if (self::isNativeSmtpTestCall()) {
-    return; // don't wrap, see below
+    return; // ne pas envelopper, voir ci-dessous
   }
   if (!($mailer instanceof CRM_Multiplesmtp_ProxyMailer)) {
     $mailer = new CRM_Multiplesmtp_ProxyMailer($mailer);
@@ -283,14 +283,14 @@ public static function alterMailer(&$mailer, $driver, $params) {
 }
 ```
 
-**Excluding the native SMTP test** (`isNativeSmtpTestCall()`):
-The native "Save & Send Test Email" button on *Administer > System Settings > Outbound Mail* calls `CRM_Utils_Mail::_createMailer()` (which fires `alterMailer`), then `CRM_Utils_Mail::sendTest()`, which calls `$mailer->send()` **directly**, without going back through `CRM_Utils_Mail::send()` — so it **never triggers `alterMailParams()`**. If this mailer were wrapped in our `ProxyMailer`, it would consult the static flag `$useAltMailerForNextSend`, which would hold a **stale** value left over from an unrelated previous send. So we detect this call via `debug_backtrace()` (looking for the `CRM_Admin_Form_Setting_Smtp::sendTest` frame) and return without wrapping the mailer — it stays the raw native mailer, testing exactly the config shown in the form.
+**Exclusion du test natif SMTP** (`isNativeSmtpTestCall()`) :
+Le bouton natif « Save & Send Test Email » de *Administer > System Settings > Outbound Mail* appelle `CRM_Utils_Mail::_createMailer()` (ce qui déclenche `alterMailer`), puis `CRM_Utils_Mail::sendTest()`, qui appelle `$mailer->send()` **directement**, sans repasser par `CRM_Utils_Mail::send()` — donc **sans jamais déclencher `alterMailParams()`**. Si ce mailer était enveloppé dans notre `ProxyMailer`, celui-ci consulterait le flag statique `$useAltMailerForNextSend`, qui contiendrait une valeur **périmée** issue d'un envoi précédent sans rapport. On détecte donc cet appel via `debug_backtrace()` (recherche de la frame `CRM_Admin_Form_Setting_Smtp::sendTest`) et on retourne sans envelopper le mailer — il reste alors le mailer natif brut, testant exactement la config du formulaire.
 
-⚠️ This backtrace-based detection is fragile against internal CiviCRM core changes. Worth re-checking after major version upgrades.
+⚠️ Cette détection par backtrace est fragile aux changements internes de CiviCRM core. À surveiller lors des montées de version majeures.
 
 ### 2. `civi.flexmailer.run` → `Hook::onFlexMailerRun()`
 
-Registered in `multiplesmtp_civicrm_config()`:
+Enregistré dans `multiplesmtp_civicrm_config()` :
 
 ```php
 Civi::dispatcher()->addListener(
@@ -300,7 +300,7 @@ Civi::dispatcher()->addListener(
 );
 ```
 
-This event fires **once per mailing job processed** (for both test sends and normal sends), **before** the job's messages are actually sent. At this point, the CiviMail workflow guarantees `civicrm_mailing_event_queue` is already fully populated for this job (a job only moves to `Running` status once its entire recipient queue has been built) — so we can reliably count actual recipients:
+Cet événement se déclenche **une fois par job de mailing traité** (aussi bien pour un envoi de test que pour un envoi normal), **avant** l'envoi effectif des messages du job. À ce stade, le worklow CiviMail garantit que `civicrm_mailing_event_queue` est déjà entièrement peuplée pour ce job (un job ne passe au statut `Running` qu'une fois toute sa queue de destinataires construite) — on peut donc compter les destinataires réels de manière fiable :
 
 ```php
 $recipientCount = (int) CRM_Core_DAO::singleValueQuery(
@@ -310,37 +310,37 @@ $recipientCount = (int) CRM_Core_DAO::singleValueQuery(
 self::$currentJobUseAltMailer = ($recipientCount > 0 && $recipientCount <= $limit);
 ```
 
-The result is stored in the static property `$currentJobUseAltMailer`, later consumed by `alterMailParams()` for **every** recipient of that job (a single calculation per job, not per recipient — avoids `N` redundant SQL queries).
+Le résultat est stocké dans la propriété statique `$currentJobUseAltMailer`, consommée ensuite par `alterMailParams()` pour **chaque** destinataire de ce job (un seul calcul par job, pas par destinataire — évite `N` requêtes SQL redondantes).
 
-**Known limitation**: if CiviCRM splits a mailing into several parallel child jobs (`mailerJobsMax` > 1), each child job is counted independently — the threshold then applies per sub-job, not to the mailing's total. This is a rare case (default config = a single job), but worth documenting if the client enables parallelism.
+**Limite connue** : si CiviCRM découpe un mailing en plusieurs jobs enfants parallèles (`mailerJobsMax` > 1), chaque job enfant est compté indépendamment — le seuil s'applique alors par sous-job, pas sur le total du mailing. Cas rare (config par défaut = un seul job), mais à documenter si le client active le parallélisme.
 
-Counting is done by `job_id`, not `mailing_id`, on purpose: counting by `mailing_id` would artificially inflate the total for a test send on a mailing that's already been partially sent in bulk (the real job's queue rows would add up with the test job's rows).
+Le comptage se fait par `job_id` et non par `mailing_id`, volontairement : compter par `mailing_id` gonflerait artificiellement le total pour un envoi de test sur un mailing déjà partiellement envoyé en masse (les lignes de la queue du job réel s'additionneraient à celles du job de test).
 
 ### 3. `hook_civicrm_alterMailParams` → `Hook::alterMailParams()`
 
-Fired right before each individual send (one call per recipient). Determines, for **this** specific message, whether it should use the transactional SMTP:
+Déclenché juste avant chaque envoi individuel (un appel par destinataire). Détermine, pour **ce** message précis, s'il doit utiliser le SMTP transactionnel :
 
 ```php
 $isMailingContext = in_array($context, ['civimail', 'flexmailer', 'testEmail'], TRUE)
   || !empty($params['headers']['List-Unsubscribe']);
 
 if ($isMailingContext) {
-  // Decision already computed by onFlexMailerRun() for this job.
+  // Décision déjà calculée par onFlexMailerRun() pour ce job.
   self::$useAltMailerForNextSend = self::$currentJobUseAltMailer;
 }
 else {
-  // Send outside CiviMail (individual transactional email, "Send an email" task...):
-  // count this message's recipients (to+cc+bcc) and apply the same threshold.
+  // Envoi hors CiviMail (transactionnel unitaire, tâche "Envoyer un email"...) :
+  // on compte les destinataires de CE message (to+cc+bcc) et on applique le même seuil.
   $recipientCount = self::countRecipients($params);
   self::$useAltMailerForNextSend = ($recipientCount > 0 && $recipientCount <= $limit);
 }
 ```
 
-The threshold used is CiviCRM's **native** `simple_mail_limit` setting (`Civi::settings()->get('simple_mail_limit')`) — **not** a setting specific to this extension. CiviCRM natively uses this same setting to decide whether a "Send an email" task should be forced into a real CiviMail mailing (above the threshold) or sent directly (below it): the extension reuses a threshold the admin is already familiar with.
+Le seuil utilisé est le réglage **natif** CiviCRM `simple_mail_limit` (`Civi::settings()->get('simple_mail_limit')`) — **pas** un réglage propre à cette extension. Ce même réglage sert nativement à CiviCRM pour décider si une tâche "Envoyer un email" doit être forcée vers un vrai mailing CiviMail (au-delà du seuil) ou envoyée directement (en-deçà) : notre extension réutilise donc un seuil déjà familier à l'admin.
 
-The whole method is wrapped in a `try/catch (\Throwable $e)`: on any unexpected error (e.g. a missing table, a Mosaico edge case, etc.), we log via `Civi::log()->error()` and **systematically fall back to the primary SMTP** rather than letting the send fail. The same precaution is taken in `onFlexMailerRun()`.
+Toute la méthode est enveloppée dans un `try/catch (\Throwable $e)` : en cas d'erreur imprévue (ex. absence de table, edge-case Mosaico, etc.), on journalise via `Civi::log()->error()` et on se **replie systématiquement sur le SMTP principal** plutôt que de faire échouer l'envoi. Même précaution dans `onFlexMailerRun()`.
 
-### 4. `CRM_Multiplesmtp_ProxyMailer` — actual routing
+### 4. `CRM_Multiplesmtp_ProxyMailer` — routage effectif
 
 ```php
 public function send($recipients, $headers, $body, $originalValues = []) {
@@ -351,49 +351,49 @@ public function send($recipients, $headers, $body, $originalValues = []) {
       $target = $alt;
     }
   }
-  CRM_Multiplesmtp_Hook::$useAltMailerForNextSend = FALSE; // always reset
+  CRM_Multiplesmtp_Hook::$useAltMailerForNextSend = FALSE; // reset systématique
   return $target->send($recipients, $headers, $body, $originalValues);
 }
 ```
 
-A new PEAR mailer (`Mail::factory('smtp', ...)`) is rebuilt **on every transactional send** via `buildAlternativeMailer()` (no connection caching). The `$useAltMailerForNextSend` flag is reset to `FALSE` immediately after being consumed, as a safety net (in case `alterMailParams` isn't called again before the next `send()`).
+Un nouveau mailer PEAR (`Mail::factory('smtp', ...)`) est reconstruit **à chaque envoi transactionnel** via `buildAlternativeMailer()` (pas de mise en cache de la connexion). Le flag `$useAltMailerForNextSend` est remis à `FALSE` immédiatement après consommation, par sécurité (au cas où `alterMailParams` ne serait pas rappelé avant le prochain `send()`).
 
-Any method not defined here (`getDriver()`, `disconnect()`, etc.) is delegated to the default mailer via `__call()`.
+Les méthodes non définies (`getDriver()`, `disconnect()`, etc.) sont déléguées au mailer par défaut via `__call()`.
 
-### Settings storage
+### Stockage des réglages
 
-All settings are prefixed `multiplesmtp_` and stored via `Civi::settings()` (no dedicated table, no formal `settings/*.setting.php` file — settings are written/read dynamically, with no declared metadata). Fields defined in `Hook::$fields`:
+Tous les réglages sont préfixés `multiplesmtp_` et stockés via `Civi::settings()` (pas de table dédiée, pas de fichier `settings/*.setting.php` formel — les settings sont écrits/lus dynamiquement, sans métadonnées déclarées). Champs définis dans `Hook::$fields` :
 
-| Key (prefixed `multiplesmtp_`) | Type    | Notes |
+| Clé (préfixée `multiplesmtp_`) | Type    | Notes |
 |---|---|---|
-| `enabled` | checkbox | Enables/disables the whole feature. If unchecked: all other `multiplesmtp_*` settings are set to `NULL` (see `postProcess()`). |
-| `smtp_server` | text | Can include an `ssl://` prefix. |
-| `smtp_port` | text | Defaults to `587` if empty (see `buildAlternativeMailer()`). |
-| `smtp_auth` | radio (Yes/No) | Stored as `int` (0/1). |
+| `enabled` | checkbox | Active/désactive toute la fonctionnalité. Si décochée : tous les autres settings `multiplesmtp_*` sont mis à `NULL` (voir `postProcess()`). |
+| `smtp_server` | text | Peut inclure `ssl://` en préfixe. |
+| `smtp_port` | text | Défaut `587` si vide (voir `buildAlternativeMailer()`). |
+| `smtp_auth` | radio (Oui/Non) | Stocké en `int` (0/1). |
 | `smtp_username` | text | |
-| `smtp_password` | password | Encrypted via `CRM_Utils_Crypt::encrypt()` if available, otherwise falls back to `base64` (⚠️ not real encryption, just obfuscation — worth improving if `CRM_Utils_Crypt` availability isn't guaranteed in production). |
+| `smtp_password` | password | Chiffré via `CRM_Utils_Crypt::encrypt()` si disponible, sinon fallback `base64` (⚠️ pas un chiffrement réel, juste un obscurcissement — à améliorer si `CRM_Utils_Crypt` n'est pas garanti disponible en prod). |
 
-The password is **never** re-displayed in plain text in the form: a `(saved password)` placeholder is shown if a value already exists, and the field is only updated if the admin enters a new value (`postProcess()`, `smtp_password` block).
+Le mot de passe n'est **jamais** ré-affiché en clair dans le formulaire : un placeholder `(mot de passe enregistré)` s'affiche si une valeur existe déjà, et le champ n'est mis à jour que si l'admin saisit une nouvelle valeur (`postProcess()`, bloc `smtp_password`).
 
-### Form (`Hook::buildForm()` / `Hook::postProcess()`)
+### Formulaire (`Hook::buildForm()` / `Hook::postProcess()`)
 
-The fields are dynamically injected into `CRM_Admin_Form_Setting_Smtp` via:
-- `hook_civicrm_buildForm` → adds the form elements.
-- An additional template (`SmtpAltFields.tpl`) injected into the `page-body` region (`CRM_Core_Region::instance('page-body')->add(...)`), which displays these fields in a dedicated table.
-- `js/multiplesmtp.js` handles conditional display (show/hide based on the "Configure a transactional flow" checkbox).
+Les champs sont injectés dynamiquement dans `CRM_Admin_Form_Setting_Smtp` via :
+- `hook_civicrm_buildForm` → ajoute les éléments de formulaire.
+- Un template additionnel (`SmtpAltFields.tpl`) injecté dans la région `page-body` (`CRM_Core_Region::instance('page-body')->add(...)`), qui affiche ces champs dans une table dédiée.
+- `js/multiplesmtp.js` gère l'affichage conditionnel (show/hide selon la case « Configurer un flux transactionnel »).
 
-`postProcess()` also handles the "Save & Test" button (`multiplesmtp_test` in `$values`), which calls `sendTestEmail()` — a send built and dispatched **directly** via `Mail::factory()` (so, like the native test, it happens **outside** of `CRM_Utils_Mail::send()`/`alterMailParams()` — no possible interference with the routing logic).
+`postProcess()` gère aussi le bouton « Enregistrer et tester » (`multiplesmtp_test` dans `$values`), qui appelle `sendTestEmail()` — un envoi construit et expédié **directement** via `Mail::factory()` (donc, comme pour le test natif, **hors** de `CRM_Utils_Mail::send()`/`alterMailParams()` — pas d'interférence possible avec la logique de routage).
 
-### Points of attention / technical debt
+### Points d'attention / dette technique
 
-1. **`isNativeSmtpTestCall()` via `debug_backtrace()`**: fragile against internal refactors of `CRM_Admin_Form_Setting_Smtp` in future major CiviCRM versions. Worth re-validating after every major version upgrade.
-2. **No SMTP connection caching**: every transactional send rebuilds a `Mail::factory()` connection. Acceptable at low volume (which is precisely the intended use case), worth revisiting if "transactional" volume grows significantly.
-3. **`mailerJobsMax` > 1**: counting by `job_id` only reflects the sub-job, not the full mailing, if CiviMail parallelism is enabled.
-4. **Password encryption**: relies on `CRM_Utils_Crypt` being available, with an insecure `base64_encode` fallback. Worth documenting/monitoring in case this class isn't loaded in a given context.
-5. **No formally declared settings** (`settings/*.setting.php`) despite the `setting-php@1.0.0` mixin being present in `info.xml` — values go through `Civi::settings()->set()/get()` with no registered metadata. Functional but less "clean" than the standard CiviCRM declaration approach.
+1. **`isNativeSmtpTestCall()` via `debug_backtrace()`** : fragile face aux refactors internes de `CRM_Admin_Form_Setting_Smtp` dans de futures versions majeures de CiviCRM. À valider après chaque montée de version.
+2. **Pas de cache de connexion SMTP** : chaque envoi transactionnel reconstruit une connexion `Mail::factory()`. Acceptable en volume faible (c'est précisément le cas d'usage visé), à revoir si le volume "transactionnel" grossit significativement.
+3. **`mailerJobsMax` > 1** : le comptage par `job_id` ne reflète que le sous-job, pas le mailing complet, si le parallélisme CiviMail est activé.
+4. **Chiffrement du mot de passe** : dépend de la disponibilité de `CRM_Utils_Crypt`, avec fallback `base64_encode` non sécurisé. Documenter/monitorer ce point si la classe venait à ne pas être chargée dans un contexte donné.
+5. **Pas de settings déclarés formellement** (`settings/*.setting.php`) malgré le mixin `setting-php@1.0.0` présent dans `info.xml` — les valeurs passent par `Civi::settings()->set()/get()` sans métadonnées enregistrées. Fonctionnel mais moins "propre" que la déclaration standard CiviCRM.
 
-### Extension points
+### Point d'entrée pour étendre le comportement
 
-- To recognize a new "mailing" context: extend the `['civimail', 'flexmailer', 'testEmail']` array in `alterMailParams()`.
-- To change the threshold's source (e.g. an extension-specific setting instead of the native `simple_mail_limit`): update both `Civi::settings()->get('simple_mail_limit')` calls in `onFlexMailerRun()` and `alterMailParams()`.
-- To add a new SMTP configuration field: add it to `Hook::$fields` — it will automatically be rendered by `buildForm()` and saved by `postProcess()` (except for types requiring special handling, cf. the `smtp_auth`/`smtp_password` blocks).
+- Pour ajouter un nouveau contexte "mailing" à reconnaître : étendre le tableau `['civimail', 'flexmailer', 'testEmail']` dans `alterMailParams()`.
+- Pour changer la source du seuil (ex. un réglage propre à l'extension au lieu du `simple_mail_limit` natif) : modifier les deux appels `Civi::settings()->get('simple_mail_limit')` dans `onFlexMailerRun()` et `alterMailParams()`.
+- Pour ajouter un nouveau champ de configuration SMTP : l'ajouter dans `Hook::$fields`, il sera automatiquement rendu par `buildForm()` et sauvegardé par `postProcess()` (sauf types nécessitant un traitement spécial, cf. blocs `smtp_auth`/`smtp_password`).
