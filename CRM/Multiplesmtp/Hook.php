@@ -308,6 +308,45 @@ class CRM_Multiplesmtp_Hook {
         return;
       }
 
+      // -----------------------------------------------------------
+      // >>> DEB DÉTECTION DES EMAILS DONREC (REÇUS FISCAUX) <<<
+      // -----------------------------------------------------------
+      // DonRec ajoute un header spécifique :
+      //   Nom  : X400-Content-Identifier 
+      //            >> TODO ATTENTION Si SYSTOPIA le change (info se trouvant dans CRM_Donrec_Logic_EmailReturnProcessor et appeler dans CRM_Donrec_Exporters_EmailPDF)
+      //   Valeur : DONREC#{contact_id}#{contribution_id}#{timestamp}#{profile_id}#
+      //
+      // Si ce header est présent et commence par "DONREC#", on considère
+      // que c'est un envoi de reçu fiscal DonRec → on force le SMTP alternatif.
+      // -----------------------------------------------------------
+      $isDonRec = FALSE;
+
+      if (!empty($params['headers']['X400-Content-Identifier'])) {
+        $headerValue = $params['headers']['X400-Content-Identifier'];
+        if (is_string($headerValue) && stripos($headerValue, 'DONREC#') === 0) {
+          $isDonRec = TRUE;
+        }
+      }
+
+      // Fallback : détection via le sujet (au cas où le header serait absent)
+      if (!$isDonRec && !empty($params['subject'])) {
+        $subject = strtolower($params['subject']);
+        if (stripos($subject, 'zuwendungsbescheinigung') !== FALSE
+          || stripos($subject, 'donation receipt') !== FALSE
+        ) {
+          $isDonRec = TRUE;
+        }
+      }
+
+      // Si c'est un email DonRec, on force l'utilisation du SMTP alternatif.
+      if ($isDonRec) {
+        self::$useAltMailerForNextSend = TRUE;
+        return;
+      }
+      // -----------------------------------------------------------
+      // >>> END DÉTECTION DES EMAILS DONREC (REÇUS FISCAUX) <<<
+      // -----------------------------------------------------------
+
       $isMailingContext = in_array($context, ['civimail', 'flexmailer', 'testEmail'], TRUE)
         || !empty($params['headers']['List-Unsubscribe']);
 
