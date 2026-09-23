@@ -4,19 +4,38 @@
   <name>Gestad multiplesmtp</name>
   <description>
   <![CDATA[
-Extension CiviCRM permettant de configurer un deuxième serveur SMTP afin de différencier l’envoi des courriels transactionnels et des courriels de campagne (bulk).
+  <p>
+  Extension CiviCRM permettant de configurer un deuxième serveur SMTP afin de
+  différencier l’envoi des courriels transactionnels et des courriels de campagne
+  (bulk).
+</p>
 
-Cette extension fonctionne uniquement lorsque l’envoi des courriels s’effectue via un serveur SMTP.
+<p>
+  Cette extension fonctionne uniquement lorsque l’envoi des courriels s’effectue
+  via un serveur SMTP.
+</p>
 
-Si vous utilisez un service SMTP propriétaire ou une autre méthode d’envoi, les fonctionnalités natives de CiviCRM peuvent ne pas être utilisées. Dans ce cas, cette extension n’est pas nécessaire.
+<p>
+  Si vous utilisez un service SMTP propriétaire ou une autre méthode d’envoi,
+  les fonctionnalités natives de CiviCRM peuvent ne pas être utilisées.
+  Dans ce cas, cette extension n’est pas nécessaire.
+</p>
 
----
+<hr>
 
-CiviCRM extension that allows you to configure a second SMTP server in order to distinguish between transactional emails and bulk campaign emails.
+<p>
+  CiviCRM extension that allows you to configure a second SMTP server in order
+  to distinguish between transactional emails and bulk campaign emails.
+</p>
 
-This extension works only when emails are sent through an SMTP server.
+<p>
+  This extension works only when emails are sent through an SMTP server.
+</p>
 
-If you use a proprietary SMTP service or another delivery method, CiviCRM’s native functionality may not be used. In that case, this extension is not necessary.
+<p>
+  If you use a proprietary SMTP service or another delivery method, CiviCRM’s
+  native functionality may not be used. In that case, this extension is not necessary.
+</p>
 ]]></description>
   <license>AGPL-3.0</license>
   <authors>
