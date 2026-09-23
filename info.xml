@@ -2,6 +2,7 @@
 <extension key="multiplesmtp" type="module">
   <file>multiplesmtp</file>
   <name>Gestad multiplesmtp</name>
+  <description>
   <![CDATA[
 Extension CiviCRM permettant de configurer un deuxième serveur SMTP afin de différencier l’envoi des courriels transactionnels et des courriels de campagne (bulk).
 
