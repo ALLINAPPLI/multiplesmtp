@@ -95,6 +95,26 @@
           </td>
         </tr>
 
+        {* ── Case "Forcer Donation Receipts" — affichée seulement si DonRec installé ── *}
+        {if $donrec_installed|default:false}
+          <tr class="crm-smtp-form-block-force-donrec">
+            <td class="label">
+              <label for="{$smtpAltPrefix}force_donrec">
+                {$form[$smtpAltPrefix|cat:'force_donrec'].html}
+              </label>
+            </td>
+            <td>
+              <label for="{$smtpAltPrefix}force_donrec" style="font-weight:normal;">
+                {ts}Forcer l'envoi des Donation Receipts via le SMTP transactionnel{/ts}
+              </label>
+              <br>
+              <span class="description">
+                {ts}Si l'extension Donation Receipts (de.systopia.donrec) est installée, tous les reçus fiscaux seront envoyés via le SMTP transactionnel.{/ts}
+              </span>
+            </td>
+          </tr>
+        {/if}
+
         {* ── Bouton test — dans l'encart, pas à côté du bouton principal ── *}
         <tr class="crm-smtp-form-block-test-btn">
           <td class="label"></td>
