@@ -4,97 +4,71 @@
 ## What does this extension do?
 
 
-By default, CiviCRM sends **all** your emails (newsletters, donation receipts, event confirmations, reminders...) through a single SMTP server.
+By default, CiviCRM sends **all** emails (newsletters, donation receipts, event confirmations, reminders...) through a single SMTP server.
 
 
-This extension lets you add a **second SMTP server**, dedicated to small ("transactional") sends, alongside your usual primary SMTP server (dedicated to large "bulk" sends). The goal: protect the reputation and deliverability of your primary SMTP by only using it for genuine bulk sends, while routing small sends through a separate channel.
+This extension adds a **second SMTP server**, dedicated to small ("transactional") sends, while your primary SMTP handles large "bulk" sends. This protects the reputation and deliverability of your primary SMTP.
 
 
 ## How does it decide which SMTP to use?
 
 
-The rule is simple and relies on a setting that already exists natively in CiviCRM, **"Simple mail limit"** (`simple_mail_limit`), found under:
+The extension uses CiviCRM's native **"Simple mail limit"** (`simple_mail_limit`), found under:
 
 
 > **Administer > System Settings > Outbound Mail**
 
 
-- If the number of recipients for a send is **less than or equal to** this limit → the email goes out via the **transactional SMTP** (the second server configured by this extension).
-- If the number of recipients is **greater than** this limit → the email goes out via the **primary SMTP** (the one configured natively by CiviCRM).
+- **≤ limit** → email sent via **transactional SMTP** (second server).
+- **> limit** → email sent via **primary SMTP** (native CiviCRM server).
 
 
-This rule applies to **all sends**:
-- CiviCRM mailings (classic and Mosaico), whether it's a **test send** or a **normal send**.
-- Individual emails (contribution receipts, event confirmations, etc.).
-- The "Send an email" task on a selection of contacts.
+This applies to all sends: CiviCRM mailings (test or normal), individual emails, and "Send an email" tasks.
 
 
-**Deliberate exception:** the two test buttons found on the *Administer > System Settings > Outbound Mail* page (the native test for the primary SMTP, and the test for our transactional SMTP) are **never** affected by this rule: each one always tests exactly the server it's supposed to test, with no interference.
+### Special case: Donation Receipts
 
 
-**If no limit is configured** (field left empty or set to 0): all sends keep using the primary SMTP, as if the extension didn't exist — CiviCRM's default behavior is unchanged.
+If the **Donation Receipts** extension (`de.systopia.donrec`) is installed, an additional option appears:
 
 
-### Special case: Donation Receipts (de.systopia.donrec)
+- **"Force sending of Donation Receipts via the transactional SMTP"**.
 
 
-If the **Donation Receipts** extension (`de.systopia.donrec`) is installed and enabled, an additional option appears:
-
-
-- **"Force sending of Donation Receipts via the transactional SMTP"** checkbox.
-
-
-When this option is checked:
-- **All** donation receipts sent via the Donation Receipts extension are routed through the **transactional SMTP**, regardless of the `simple_mail_limit`.
-- This applies even though Donation Receipts sends emails individually (one email per recipient), which would normally be treated as "small sends" anyway.
-
-
-This option is useful when:
-- You want to **guarantee** that all donation receipts use the transactional SMTP (e.g., for better deliverability, specific tracking, or compliance reasons).
-- Your transactional SMTP has higher sending limits or better reputation for critical transactional emails.
-
-
-If this option is **not checked**, donation receipts follow the standard rule based on `simple_mail_limit` (which, since they're sent individually, will typically route them through the transactional SMTP anyway if the limit is > 1).
+When checked, **all** donation receipts use the transactional SMTP, regardless of recipient count.
 
 
 ## Configuration
 
 
 1. Go to **Administer > System Settings > Outbound Mail**.
-2. Below the primary SMTP settings, a new section appears: **"Configure a transactional flow"**.
-3. Check the box to enable the feature.
+2. Under primary SMTP settings, find **"Configure a transactional flow"**.
+3. Check the box to enable.
 4. Fill in:
-   - **Transactional SMTP server**: your server's address (e.g. `smtp.myprovider.com`). Prefix it with `ssl://` if your server requires it (e.g. `ssl://smtp.myprovider.com`).
-   - **Transactional SMTP port**: usually 25, 465, or 587 depending on your provider.
-   - **Authentication required**: Yes/No depending on whether your server requires credentials.
-   - **Username** and **Password** for SMTP (if authentication is required). The password is stored encrypted.
-5. If the **Donation Receipts** extension (`de.systopia.donrec`) is installed, an additional checkbox appears:
-   - **"Force sending of Donation Receipts via the transactional SMTP"**. Check this if you want all donation receipts to be sent via the transactional SMTP, regardless of recipient count.
-6. Click **"Save & Test"** to validate your configuration: a test email is sent to your own address via the transactional SMTP.
-7. Don't forget to fill in (or check) the **"Simple mail limit"** field further up on the same page — that's the number used as the switching threshold.
+   - **Transactional SMTP server** (e.g. `smtp.myprovider.com` or `ssl://smtp.myprovider.com`).
+   - **Transactional SMTP port** (usually 25, 465, or 587).
+   - **Authentication required** (Yes/No).
+   - **Username** and **Password** (if required).
+5. If Donation Receipts is installed, optionally check:
+   - **"Force sending of Donation Receipts via the transactional SMTP"**.
+6. Click **"Save & Test"** to send a test email via the transactional SMTP.
+7. Ensure **"Simple mail limit"** is set — this is the switching threshold.
 
 
 ## Frequently asked questions
 
 
-**I unchecked "Configure a transactional flow" — what happens to my settings?**
-All transactional SMTP settings (server, port, credentials...) are cleared. You'll need to start over if you re-enable it later.
+**What happens if I uncheck "Configure a transactional flow"?**  
+All transactional SMTP settings are cleared.
 
+**What if my transactional SMTP is down?**  
+Use the test button to check connectivity. Actual sends will fail visibly (like any SMTP error).
 
-**What if my transactional SMTP is down?**
-The test button on the settings page lets you check the connection at any time. If an error occurs during an actual send, the email isn't silently lost — it fails, like any other SMTP failure in CiviCRM.
+**How do I know which SMTP was used?**  
+Compare the mailing's recipient count against the `simple_mail_limit`.
 
-
-**How do I know a mailing went out through the right SMTP?**
-There's no direct visual indicator in the interface. The simplest way is to compare the number of recipients of the mailing against the limit configured under *Outbound Mail*.
-
-
-**I don't see the "Force sending of Donation Receipts" checkbox — why?**
-This checkbox only appears if:
-1. The **Donation Receipts** extension (`de.systopia.donrec`) is installed and active.
-2. You have checked **"Configure a transactional flow"**.
-
-If Donation Receipts is not installed, this option is hidden (it wouldn't make sense).
+**Why don't I see the "Force Donation Receipts" option?**  
+It only appears if Donation Receipts (`de.systopia.donrec`) is installed and active.
 
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -106,97 +80,71 @@ If Donation Receipts is not installed, this option is hidden (it wouldn't make s
 ## À quoi sert cette extension ?
 
 
-Par défaut, CiviCRM envoie **tous** vos emails (newsletters, reçus de dons, confirmations d'événements, rappels...) via un seul et même serveur SMTP.
+Par défaut, CiviCRM envoie **tous** vos emails (newsletters, reçus de dons, confirmations, rappels...) via un seul serveur SMTP.
 
 
-Cette extension permet d'ajouter un **second serveur SMTP**, dédié aux petits envois (« transactionnels »), en plus de votre SMTP principal habituel (dédié aux gros envois « en masse »/« bulk »). L'objectif : préserver la réputation et la délivrabilité de votre SMTP principal en ne l'utilisant que pour les vrais envois de masse, et faire passer les petits envois par un canal séparé.
+Cette extension ajoute un **second serveur SMTP**, dédié aux petits envois (« transactionnels »), tandis que votre SMTP principal gère les gros envois « en masse ». Cela préserve la réputation et la délivrabilité de votre SMTP principal.
 
 
 ## Comment ça choisit quel SMTP utiliser ?
 
 
-La règle est simple et s'appuie sur un réglage déjà présent nativement dans CiviCRM, **« Nombre de destinataires maximum pour un envoi simple »** (`simple_mail_limit`), que vous trouvez dans :
+L'extension utilise le réglage natif CiviCRM **« Nombre de destinataires maximum pour un envoi simple »** (`simple_mail_limit`), dans :
 
 
 > **Administer > System Settings > Outbound Mail**
 
 
-- Si le nombre de destinataires d'un envoi est **inférieur ou égal** à cette limite → l'email part via le **SMTP transactionnel** (le second serveur, configuré par cette extension).
-- Si le nombre de destinataires est **supérieur** à cette limite → l'email part via le **SMTP principal** (celui configuré nativement par CiviCRM).
+- **≤ limite** → email envoyé via le **SMTP transactionnel** (second serveur).
+- **> limite** → email envoyé via le **SMTP principal** (serveur natif CiviCRM).
 
 
-Cette règle s'applique à **tous les envois** :
-- Les mailings CiviCRM (classiques et Mosaico), qu'il s'agisse d'un **envoi de test** ou d'un **envoi normal**.
-- Les emails individuels (reçus de contribution, confirmations d'événement, etc.).
-- La tâche « Envoyer un email » sur une sélection de contacts.
+Cela s'applique à tous les envois : mailings CiviCRM (test ou normal), emails individuels, tâches « Envoyer un email ».
 
 
-**Exception volontaire :** les deux boutons de test présents sur la page *Administer > System Settings > Outbound Mail* (le test natif du SMTP principal, et le test de notre SMTP transactionnel) ne sont **jamais** concernés par cette règle : chacun teste toujours exactement le serveur qu'il est censé tester, sans interférence.
+### Cas particulier : Donation Receipts
 
 
-**Si aucune limite n'est configurée** (champ vide ou à 0) : tous les envois continuent d'utiliser le SMTP principal, comme si l'extension n'existait pas — le comportement de CiviCRM reste inchangé par défaut.
+Si l'extension **Donation Receipts** (`de.systopia.donrec`) est installée, une option supplémentaire apparaît :
 
 
-### Cas particulier : Donation Receipts (de.systopia.donrec)
+- **« Forcer l'envoi des Donation Receipts via le SMTP transactionnel »**.
 
 
-Si l'extension **Donation Receipts** (`de.systopia.donrec`) est installée et activée, une option supplémentaire apparaît :
-
-
-- Une case à cocher **« Forcer l'envoi des Donation Receipts via le SMTP transactionnel »**.
-
-
-Lorsque cette option est cochée :
-- **Tous** les reçus fiscaux envoyés via l'extension Donation Receipts sont routés vers le **SMTP transactionnel**, indépendamment de la limite `simple_mail_limit`.
-- Cela s'applique même si Donation Receipts envoie les emails individuellement (un email par destinataire), ce qui les ferait normalement passer de toute façon comme « petits envois ».
-
-
-Cette option est utile lorsque :
-- Vous souhaitez **garantir** que tous les reçus fiscaux utilisent le SMTP transactionnel (par exemple pour une meilleure délivrabilité, un suivi spécifique, ou des raisons de conformité).
-- Votre SMTP transactionnel a des limites d'envoi plus élevées ou une meilleure réputation pour les emails transactionnels critiques.
-
-
-Si cette option **n'est pas cochée**, les reçus fiscaux suivent la règle standard basée sur `simple_mail_limit` (ce qui, comme ils sont envoyés individuellement, les routera typiquement vers le SMTP transactionnel de toute façon si la limite est > 1).
+Lorsqu'elle est cochée, **tous** les reçus fiscaux utilisent le SMTP transactionnel, indépendamment du nombre de destinataires.
 
 
 ## Configuration
 
 
 1. Allez sur **Administer > System Settings > Outbound Mail**.
-2. Sous les réglages du SMTP principal, une nouvelle section apparaît : **« Configurer un flux transactionnel »**.
-3. Cochez la case pour activer la fonctionnalité.
+2. Sous les réglages du SMTP principal, trouvez **« Configurer un flux transactionnel »**.
+3. Cochez la case pour activer.
 4. Renseignez :
-   - **Serveur SMTP transactionnel** : l'adresse de votre serveur (ex. `smtp.monfournisseur.com`). Ajoutez `ssl://` devant si votre serveur l'exige (ex. `ssl://smtp.monfournisseur.com`).
-   - **Port SMTP transactionnel** : généralement 25, 465 ou 587 selon votre fournisseur.
-   - **Authentification requise** : Oui/Non selon si votre serveur demande un identifiant.
-   - **Nom d'utilisateur** et **Mot de passe** SMTP (si authentification requise). Le mot de passe est stocké chiffré.
-5. Si l'extension **Donation Receipts** (`de.systopia.donrec`) est installée, une case supplémentaire apparaît :
-   - **« Forcer l'envoi des Donation Receipts via le SMTP transactionnel »**. Cochez-la si vous souhaitez que tous les reçus fiscaux soient envoyés via le SMTP transactionnel, indépendamment du nombre de destinataires.
-6. Cliquez sur **« Enregistrer et tester »** pour valider votre configuration : un email de test est envoyé à votre propre adresse via le SMTP transactionnel.
-7. N'oubliez pas de renseigner (ou vérifier) le champ **« Nombre de destinataires maximum pour un envoi simple »** plus haut sur la même page — c'est ce nombre qui sert de seuil de basculement.
+   - **Serveur SMTP transactionnel** (ex. `smtp.monfournisseur.com` ou `ssl://smtp.monfournisseur.com`).
+   - **Port SMTP transactionnel** (généralement 25, 465 ou 587).
+   - **Authentification requise** (Oui/Non).
+   - **Nom d'utilisateur** et **Mot de passe** (si requis).
+5. Si Donation Receipts est installé, vous pouvez optionnellement cocher :
+   - **« Forcer l'envoi des Donation Receipts via le SMTP transactionnel »**.
+6. Cliquez sur **« Enregistrer et tester »** pour envoyer un email de test via le SMTP transactionnel.
+7. Vérifiez que **« Nombre de destinataires maximum pour un envoi simple »** est renseigné — c'est le seuil de basculement.
 
 
 ## Questions fréquentes
 
 
-**J'ai décoché la case « Configurer un flux transactionnel », que se passe-t-il à mes réglages ?**
-Tous les réglages du SMTP transactionnel (serveur, port, identifiants...) sont effacés. Vous repartez de zéro si vous réactivez plus tard.
+**Que se passe-t-il si je décoche « Configurer un flux transactionnel » ?**  
+Tous les réglages du SMTP transactionnel sont effacés.
 
+**Et si mon SMTP transactionnel est en panne ?**  
+Utilisez le bouton de test pour vérifier la connexion. Les envois réels échoueront visiblement (comme toute erreur SMTP).
 
-**Et si mon SMTP transactionnel est en panne ?**
-Le test depuis la page de configuration vous permet de vérifier la connexion à tout moment. En cas d'erreur au moment d'un envoi réel, l'email n'est pas silencieusement perdu : il tombe en erreur, comme n'importe quel échec SMTP dans CiviCRM.
+**Comment savoir quel SMTP a été utilisé ?**  
+Comparez le nombre de destinataires du mailing avec la limite `simple_mail_limit`.
 
-
-**Comment je sais qu'un mailing est bien parti par le bon SMTP ?**
-Il n'y a pas d'indicateur visuel direct dans l'interface. Le plus simple est de comparer le nombre de destinataires du mailing avec la limite configurée dans *Outbound Mail*.
-
-
-**Je ne vois pas la case « Forcer l'envoi des Donation Receipts » — pourquoi ?**
-Cette case n'apparaît que si :
-1. L'extension **Donation Receipts** (`de.systopia.donrec`) est installée et active.
-2. Vous avez coché **« Configurer un flux transactionnel »**.
-
-Si Donation Receipts n'est pas installée, cette option est masquée (elle n'aurait pas de sens).
+**Pourquoi je ne vois pas l'option « Forcer Donation Receipts » ?**  
+Elle n'apparaît que si Donation Receipts (`de.systopia.donrec`) est installé et actif.
 
 
 
@@ -210,8 +158,172 @@ ________________________________________________________________________________
 ## Technical goal
 
 
-CiviCRM only builds its PEAR mailer (`pear_mail`) **once per request**, via `CRM_Utils_Mail::createMailer()`. There's no native mechanism to dynamically route to a different mailer per message depending on context. This extension fills that gap by hooking into two CiviCRM hooks and one FlexMailer event.
+CiviCRM builds its PEAR mailer (`pear_mail`) **once per request**, via `CRM_Utils_Mail::createMailer()`. There's no native mechanism to dynamically route to a different mailer per message. This extension hooks into two CiviCRM hooks and one FlexMailer event to achieve this.
 
 
 ## Architecture
 
+
+### 1. `hook_civicrm_alterMailer` → `Hook::alterMailer()`
+
+
+Enveloppe le mailer natif dans `CRM_Multiplesmtp_ProxyMailer` (sauf test natif) :
+
+
+```php
+public static function alterMailer(&$mailer, $driver, $params) {
+  if (self::isNativeSmtpTestCall()) {
+    return;
+  }
+  if (!($mailer instanceof CRM_Multiplesmtp_ProxyMailer)) {
+    $mailer = new CRM_Multiplesmtp_ProxyMailer($mailer);
+  }
+}
+```
+
+
+### 2. `civi.flexmailer.run` → `Hook::onFlexMailerRun()`
+
+
+Déclenché **une fois par job**, compte les destinataires :
+
+
+```php
+$recipientCount = (int) CRM_Core_DAO::singleValueQuery(
+  'SELECT COUNT(*) FROM civicrm_mailing_event_queue WHERE job_id = %1',
+  [1 => [$job->id, 'Integer']]
+);
+self::$currentJobUseAltMailer = ($recipientCount > 0 && $recipientCount <= $limit);
+```
+
+
+### 3. `hook_civicrm_alterMailParams` → `Hook::alterMailParams()`
+
+
+Détermine si le SMTP transactionnel doit être utilisé :
+
+
+```php
+$isMailingContext = in_array($context, ['civimail', 'flexmailer', 'testEmail'], TRUE)
+  || !empty($params['headers']['List-Unsubscribe']);
+
+if ($isMailingContext) {
+  self::$useAltMailerForNextSend = self::$currentJobUseAltMailer;
+}
+else {
+  $recipientCount = self::countRecipients($params);
+  self::$useAltMailerForNextSend = ($recipientCount > 0 && $recipientCount <= $limit);
+}
+```
+
+
+#### Détection Donation Receipts
+
+
+```php
+$isDonRec = FALSE;
+
+if (!empty($params['headers']['X400-Content-Identifier'])) {
+  $headerValue = $params['headers']['X400-Content-Identifier'];
+  if (is_string($headerValue) && stripos($headerValue, 'DONREC#') === 0) {
+    $isDonRec = TRUE;
+  }
+}
+
+if (!$isDonRec && !empty($params['subject'])) {
+  $subject = strtolower($params['subject']);
+  if (stripos($subject, 'zuwendungsbescheinigung') !== FALSE
+    || stripos($subject, 'donation receipt') !== FALSE
+  ) {
+    $isDonRec = TRUE;
+  }
+}
+
+if ($isDonRec) {
+  $forceDonRec = (bool) Civi::settings()->get(self::SETTING_PREFIX . 'force_donrec');
+  if ($forceDonRec) {
+    self::$useAltMailerForNextSend = TRUE;
+    return;
+  }
+}
+```
+
+
+Détection via header `X400-Content-Identifier` et fallback sujet.
+
+
+### 4. `CRM_Multiplesmtp_ProxyMailer` — routage
+
+
+```php
+public function send($recipients, $headers, $body, $originalValues = []) {
+  $target = $this->defaultMailer;
+  if (CRM_Multiplesmtp_Hook::$useAltMailerForNextSend) {
+    $alt = CRM_Multiplesmtp_Hook::buildAlternativeMailerPublic();
+    if ($alt !== NULL) {
+      $target = $alt;
+    }
+  }
+  CRM_Multiplesmtp_Hook::$useAltMailerForNextSend = FALSE;
+  return $target->send($recipients, $headers, $body, $originalValues);
+}
+```
+
+
+### Stockage des réglages
+
+
+| Clé | Type | Notes |
+|---|---|---|
+| `enabled` | checkbox | Si décochée : tous settings effacés. |
+| `smtp_server` | text | |
+| `smtp_port` | text | Défaut `587`. |
+| `smtp_auth` | radio (0/1) | |
+| `smtp_username` | text | |
+| `smtp_password` | password | Chiffré (`CRM_Utils_Crypt` ou `base64`). |
+| `force_donrec` | checkbox | Seulement si DonRec installé. |
+
+
+### Gestion du formulaire
+
+
+Champs injectés via `buildForm()`, `SmtpAltFields.tpl`, et `js/multiplesmtp.js`.
+
+
+`force_donrec` ajouté seulement si `isDonRecInstalled()` :
+
+
+```php
+private static function isDonRecInstalled(): bool {
+  try {
+    $result = civicrm_api3('Extension', 'get', [
+      'full_name' => 'de.systopia.donrec',
+      'status'    => 'installed',
+    ]);
+    return !empty($result['values']);
+  }
+  catch (\Throwable $e) {
+    return FALSE;
+  }
+}
+```
+
+
+### Points d'attention
+
+
+1. **`isNativeSmtpTestCall()`** : fragile aux changements CiviCRM.
+2. **Pas de cache SMTP** : reconstruit à chaque envoi.
+3. **`mailerJobsMax` > 1** : comptage par `job_id` seulement.
+4. **Chiffrement mdp** : dépend de `CRM_Utils_Crypt`.
+5. **Pas de settings déclarés** : via `Civi::settings()` sans métadonnées.
+6. **Détection DonRec** : dépend du header `X400-Content-Identifier`.
+
+
+### Points d'extension
+
+
+- Nouveau contexte mailing : étendre le tableau dans `alterMailParams()`.
+- Changer le seuil : modifier les appels `simple_mail_limit`.
+- Nouveau champ SMTP : ajouter dans `Hook::$fields`.
+- Modifier détection DonRec : mettre à jour header/sujet dans `alterMailParams()`.
