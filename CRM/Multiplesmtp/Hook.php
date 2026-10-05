@@ -58,84 +58,190 @@ class CRM_Multiplesmtp_Hook {
   ];
 
 
-  // -------------------------------------------------------
-  // 1. Injection des champs dans la page
-  // -------------------------------------------------------
+  // // -------------------------------------------------------
+  // // 1. Injection des champs dans la page
+  // // -------------------------------------------------------
   public static function buildForm($formName, &$form) {
     if ($formName !== 'CRM_Admin_Form_Setting_Smtp') {
       return;
     }
 
     $settings = Civi::settings();
-    $prefix   = self::SETTING_PREFIX;
-
-    // Vérifier si DonRec est installé
+    $prefix = self::SETTING_PREFIX;
     $donrecInstalled = self::isDonRecInstalled();
 
-    // Ajouter la case maîtresse "enabled"
     $fullKeyEnabled = $prefix . 'enabled';
+
     $form->addElement('checkbox', $fullKeyEnabled, '');
+
     $form->setDefaults([
       $fullKeyEnabled => (bool) $settings->get($fullKeyEnabled),
     ]);
 
-    // Ajouter tous les autres champs
     foreach (self::$fields as $key => $info) {
       if ($key === 'enabled') {
-        continue; // déjà traité
+        continue;
       }
 
-      $fullKey = $prefix . $key;
-
-      // Pour force_donrec : ne l'ajouter que si DonRec est installé
       if ($key === 'force_donrec' && !$donrecInstalled) {
         continue;
       }
 
+      $fullKey = $prefix . $key;
+      $currentValue = $settings->get($fullKey);
+
       if ($info['type'] === 'radio') {
-        $form->addYesNo($fullKey, $info['label'], FALSE, FALSE);
+        $form->addYesNo(
+          $fullKey,
+          $info['label'],
+          FALSE,
+          FALSE
+        );
+
         $form->setDefaults([
-          $fullKey => (int) $settings->get($fullKey),
+          $fullKey => (int) $currentValue,
         ]);
       }
       elseif ($info['type'] === 'checkbox') {
-        $form->addElement('checkbox', $fullKey, $info['label']);
+        $form->addElement(
+          'checkbox',
+          $fullKey,
+          $info['label']
+        );
+
         $form->setDefaults([
-          $fullKey => (bool) $settings->get($fullKey),
+          $fullKey => (bool) $currentValue,
         ]);
       }
       elseif ($info['type'] === 'password') {
-        $form->addElement('password', $fullKey, $info['label'],
-          ['class' => 'crm-form-text', 'size' => 45, 'autocomplete' => 'off']
+        $form->addElement(
+          'password',
+          $fullKey,
+          $info['label'],
+          [
+            'class' => 'crm-form-text',
+            'size' => 45,
+            'autocomplete' => 'off',
+          ]
         );
-        // Placeholder si un mot de passe existe déjà
-        $currentValue = $settings->get($fullKey);
+
         if (!empty($currentValue)) {
-          $form->getElement($fullKey)->updateAttributes(['placeholder' => '(mot de passe enregistré)']);
+          $form->getElement($fullKey)->updateAttributes([
+            'placeholder' => '(mot de passe enregistré)',
+          ]);
         }
       }
       else {
-        $form->addElement('text', $fullKey, $info['label'],
-          ['class' => 'crm-form-text', 'size' => 45]
+        $form->addElement(
+          'text',
+          $fullKey,
+          $info['label'],
+          [
+            'class' => 'crm-form-text',
+            'size' => 45,
+          ]
         );
+
         $form->setDefaults([
-          $fullKey => $settings->get($fullKey),
+          $fullKey => $currentValue,
         ]);
       }
     }
 
-    $form->addElement('hidden', 'multiplesmtp_is_visible', 0);
-    $form->setDefaults(['multiplesmtp_is_visible' => 0]);
+  $form->assign('smtpAltFields', self::$fields);
+  $form->assign('smtpAltPrefix', $prefix);
+  $form->assign('donrec_installed', $donrecInstalled);
 
-    $form->assign('smtpAltFields', self::$fields);
-    $form->assign('smtpAltPrefix', self::SETTING_PREFIX);
-    $form->assign('donrec_installed', $donrecInstalled);
+  $form->assign('smtpAltDefaults', [
+    'multiplesmtp_smtp_auth' => (int) $settings->get(
+      $prefix . 'smtp_auth'
+    ),
+  ]);
 
-    if ($formName == 'CRM_Admin_Form_Setting_Smtp') {
-      Civi::resources()->addScriptFile('multiplesmtp', 'js/multiplesmtp.js');
-      CRM_Core_Region::instance('page-body')->add(['template' => 'CRM/Multiplesmtp/SmtpAltFields.tpl']);
-    }
-  }
+  Civi::resources()->addScriptFile(
+    'multiplesmtp',
+    'js/multiplesmtp.js'
+  );
+
+  CRM_Core_Region::instance('page-body')->add([
+    'template' => 'CRM/Multiplesmtp/SmtpAltFields.tpl',
+  ]);
+}
+  // public static function buildForm($formName, &$form) {
+  //   if ($formName !== 'CRM_Admin_Form_Setting_Smtp') {
+  //     return;
+  //   }
+
+  //   $settings = Civi::settings();
+  //   $prefix   = self::SETTING_PREFIX;
+
+  //   // Vérifier si DonRec est installé
+  //   $donrecInstalled = self::isDonRecInstalled();
+
+  //   // Ajouter la case maîtresse "enabled"
+  //   $fullKeyEnabled = $prefix . 'enabled';
+  //   $form->addElement('checkbox', $fullKeyEnabled, '');
+  //   $form->setDefaults([
+  //     $fullKeyEnabled => (bool) $settings->get($fullKeyEnabled),
+  //   ]);
+
+  //   // Ajouter tous les autres champs
+  //   foreach (self::$fields as $key => $info) {
+  //     if ($key === 'enabled') {
+  //       continue; // déjà traité
+  //     }
+
+  //     $fullKey = $prefix . $key;
+
+  //     // Pour force_donrec : ne l'ajouter que si DonRec est installé
+  //     if ($key === 'force_donrec' && !$donrecInstalled) {
+  //       continue;
+  //     }
+
+  //     if ($info['type'] === 'radio') {
+  //       $form->addYesNo($fullKey, $info['label'], FALSE, FALSE);
+  //       $form->setDefaults([
+  //         $fullKey => (int) $settings->get($fullKey),
+  //       ]);
+  //     }
+  //     elseif ($info['type'] === 'checkbox') {
+  //       $form->addElement('checkbox', $fullKey, $info['label']);
+  //       $form->setDefaults([
+  //         $fullKey => (bool) $settings->get($fullKey),
+  //       ]);
+  //     }
+  //     elseif ($info['type'] === 'password') {
+  //       $form->addElement('password', $fullKey, $info['label'],
+  //         ['class' => 'crm-form-text', 'size' => 45, 'autocomplete' => 'off']
+  //       );
+  //       // Placeholder si un mot de passe existe déjà
+  //       $currentValue = $settings->get($fullKey);
+  //       if (!empty($currentValue)) {
+  //         $form->getElement($fullKey)->updateAttributes(['placeholder' => '(mot de passe enregistré)']);
+  //       }
+  //     }
+  //     else {
+  //       $form->addElement('text', $fullKey, $info['label'],
+  //         ['class' => 'crm-form-text', 'size' => 45]
+  //       );
+  //       $form->setDefaults([
+  //         $fullKey => $settings->get($fullKey),
+  //       ]);
+  //     }
+  //   }
+
+  //   $form->addElement('hidden', 'multiplesmtp_is_visible', 0);
+  //   $form->setDefaults(['multiplesmtp_is_visible' => 0]);
+
+  //   $form->assign('smtpAltFields', self::$fields);
+  //   $form->assign('smtpAltPrefix', self::SETTING_PREFIX);
+  //   $form->assign('donrec_installed', $donrecInstalled);
+
+  //   if ($formName == 'CRM_Admin_Form_Setting_Smtp') {
+  //     Civi::resources()->addScriptFile('multiplesmtp', 'js/multiplesmtp.js');
+  //     CRM_Core_Region::instance('page-body')->add(['template' => 'CRM/Multiplesmtp/SmtpAltFields.tpl']);
+  //   }
+  // }
 
 
   // -------------------------------------------------------
