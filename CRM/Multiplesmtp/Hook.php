@@ -148,101 +148,26 @@ class CRM_Multiplesmtp_Hook {
       }
     }
 
-  $form->assign('smtpAltFields', self::$fields);
-  $form->assign('smtpAltPrefix', $prefix);
-  $form->assign('donrec_installed', $donrecInstalled);
+    $form->assign('smtpAltFields', self::$fields);
+    $form->assign('smtpAltPrefix', $prefix);
+    $form->assign('donrec_installed', $donrecInstalled);
 
-  $form->assign('smtpAltDefaults', [
-    'multiplesmtp_smtp_auth' => (int) $settings->get(
-      $prefix . 'smtp_auth'
-    ),
-  ]);
+    $form->assign('smtpAltDefaults', [
+      'multiplesmtp_smtp_auth' => (int) $settings->get(
+        $prefix . 'smtp_auth'
+      ),
+    ]);
 
-  Civi::resources()->addScriptFile(
-    'multiplesmtp',
-    'js/multiplesmtp.js'
-  );
+    Civi::resources()->addScriptFile(
+      'multiplesmtp',
+      'js/multiplesmtp.js'
+    );
 
-  CRM_Core_Region::instance('page-body')->add([
-    'template' => 'CRM/Multiplesmtp/SmtpAltFields.tpl',
-  ]);
-}
-  // public static function buildForm($formName, &$form) {
-  //   if ($formName !== 'CRM_Admin_Form_Setting_Smtp') {
-  //     return;
-  //   }
-
-  //   $settings = Civi::settings();
-  //   $prefix   = self::SETTING_PREFIX;
-
-  //   // Vérifier si DonRec est installé
-  //   $donrecInstalled = self::isDonRecInstalled();
-
-  //   // Ajouter la case maîtresse "enabled"
-  //   $fullKeyEnabled = $prefix . 'enabled';
-  //   $form->addElement('checkbox', $fullKeyEnabled, '');
-  //   $form->setDefaults([
-  //     $fullKeyEnabled => (bool) $settings->get($fullKeyEnabled),
-  //   ]);
-
-  //   // Ajouter tous les autres champs
-  //   foreach (self::$fields as $key => $info) {
-  //     if ($key === 'enabled') {
-  //       continue; // déjà traité
-  //     }
-
-  //     $fullKey = $prefix . $key;
-
-  //     // Pour force_donrec : ne l'ajouter que si DonRec est installé
-  //     if ($key === 'force_donrec' && !$donrecInstalled) {
-  //       continue;
-  //     }
-
-  //     if ($info['type'] === 'radio') {
-  //       $form->addYesNo($fullKey, $info['label'], FALSE, FALSE);
-  //       $form->setDefaults([
-  //         $fullKey => (int) $settings->get($fullKey),
-  //       ]);
-  //     }
-  //     elseif ($info['type'] === 'checkbox') {
-  //       $form->addElement('checkbox', $fullKey, $info['label']);
-  //       $form->setDefaults([
-  //         $fullKey => (bool) $settings->get($fullKey),
-  //       ]);
-  //     }
-  //     elseif ($info['type'] === 'password') {
-  //       $form->addElement('password', $fullKey, $info['label'],
-  //         ['class' => 'crm-form-text', 'size' => 45, 'autocomplete' => 'off']
-  //       );
-  //       // Placeholder si un mot de passe existe déjà
-  //       $currentValue = $settings->get($fullKey);
-  //       if (!empty($currentValue)) {
-  //         $form->getElement($fullKey)->updateAttributes(['placeholder' => '(mot de passe enregistré)']);
-  //       }
-  //     }
-  //     else {
-  //       $form->addElement('text', $fullKey, $info['label'],
-  //         ['class' => 'crm-form-text', 'size' => 45]
-  //       );
-  //       $form->setDefaults([
-  //         $fullKey => $settings->get($fullKey),
-  //       ]);
-  //     }
-  //   }
-
-  //   $form->addElement('hidden', 'multiplesmtp_is_visible', 0);
-  //   $form->setDefaults(['multiplesmtp_is_visible' => 0]);
-
-  //   $form->assign('smtpAltFields', self::$fields);
-  //   $form->assign('smtpAltPrefix', self::SETTING_PREFIX);
-  //   $form->assign('donrec_installed', $donrecInstalled);
-
-  //   if ($formName == 'CRM_Admin_Form_Setting_Smtp') {
-  //     Civi::resources()->addScriptFile('multiplesmtp', 'js/multiplesmtp.js');
-  //     CRM_Core_Region::instance('page-body')->add(['template' => 'CRM/Multiplesmtp/SmtpAltFields.tpl']);
-  //   }
-  // }
-
+    CRM_Core_Region::instance('page-body')->add([
+      'template' => 'CRM/Multiplesmtp/SmtpAltFields.tpl',
+    ]);
+  }
+  
 
   // -------------------------------------------------------
   // 2. Sauvegarde des champs
@@ -375,42 +300,18 @@ class CRM_Multiplesmtp_Hook {
         return;
       }
 
+      // --- Détection DonRec AVANT la logique de limite ---
+      if (self::isDonRecMail($params)) {
+        self::$useAltMailerForNextSend = (bool) Civi::settings()
+          ->get(self::SETTING_PREFIX . 'force_donrec');
+        return; // la case décide seule, quelle que soit la limite
+      }
+
       $limit = (int) (Civi::settings()->get('simple_mail_limit') ?? 0);
       if ($limit <= 0) {
         self::$useAltMailerForNextSend = FALSE;
         return;
       }
-
-      // -----------------------------------------------------------
-      // >>> DÉTECTION DES EMAILS DONREC (REÇUS FISCAUX) <<<
-      // -----------------------------------------------------------
-      $isDonRec = FALSE;
-
-      if (!empty($params['headers']['X400-Content-Identifier'])) {
-        $headerValue = $params['headers']['X400-Content-Identifier'];
-        if (is_string($headerValue) && stripos($headerValue, 'DONREC#') === 0) {
-          $isDonRec = TRUE;
-        }
-      }
-
-      if (!$isDonRec && !empty($params['subject'])) {
-        $subject = strtolower($params['subject']);
-        if (stripos($subject, 'zuwendungsbescheinigung') !== FALSE
-          || stripos($subject, 'donation receipt') !== FALSE
-        ) {
-          $isDonRec = TRUE;
-        }
-      }
-
-      // Si c'est un email DonRec, on vérifie le setting "force_donrec"
-      if ($isDonRec) {
-        $forceDonRec = (bool) Civi::settings()->get(self::SETTING_PREFIX . 'force_donrec');
-        if ($forceDonRec) {
-          self::$useAltMailerForNextSend = TRUE;
-          return;
-        }
-      }
-      // -----------------------------------------------------------
 
       $isMailingContext = in_array($context, ['civimail', 'flexmailer', 'testEmail'], TRUE)
         || !empty($params['headers']['List-Unsubscribe']);
@@ -427,6 +328,17 @@ class CRM_Multiplesmtp_Hook {
       Civi::log()->error('multiplesmtp: alterMailParams a échoué : ' . $e->getMessage());
       self::$useAltMailerForNextSend = FALSE;
     }
+  }
+
+  private static function isDonRecMail(array $params): bool {
+    $h = $params['headers']['X400-Content-Identifier'] ?? NULL;
+    if (is_string($h) && stripos($h, 'DONREC#') === 0) {
+      return TRUE;
+    }
+    $subject = strtolower($params['subject'] ?? '');
+    return $subject !== ''
+      && (str_contains($subject, 'zuwendungsbescheinigung')
+          || str_contains($subject, 'donation receipt'));
   }
 
 
